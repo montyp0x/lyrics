@@ -27,6 +27,7 @@ targets:
         CFBundleDisplayName: Lyrics
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
         NSSupportsLiveActivities: true
         UIBackgroundModes: [audio]
         NSAppleMusicUsageDescription: Lyrics reads what's playing in Apple Music to show synced lyrics.

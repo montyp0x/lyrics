@@ -60,7 +60,7 @@ struct LRCLibClient {
             query.append(URLQueryItem(name: "duration", value: String(Int(track.duration.rounded()))))
         }
         let (data, status) = try await get("get", query: query)
-        if status == 404 { return nil }
+        if status == 404 || status >= 500 { return nil }
         guard status == 200 else { throw Failure.http(status) }
         return try JSONDecoder().decode(Record.self, from: data)
     }
@@ -80,7 +80,11 @@ struct LRCLibClient {
         components.queryItems = query
         var request = URLRequest(url: components.url!, timeoutInterval: 15)
         request.setValue("Lyrics iOS (private use)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await session.data(for: request)
+        var (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode >= 500 {
+            try await Task.sleep(for: .seconds(1))
+            (data, response) = try await session.data(for: request)
+        }
         return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
 
