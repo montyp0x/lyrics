@@ -107,6 +107,7 @@ private struct StandByHeader: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .lineLimit(1)
+        .minimumScaleFactor(0.6)
         .font(.headline)
         .foregroundStyle(.white.opacity(0.7))
     }
