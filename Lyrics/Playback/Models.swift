@@ -19,7 +19,9 @@ struct Track: Hashable {
     var duration: TimeInterval
 
     var primaryArtist: String {
-        artist.components(separatedBy: ", ").first ?? artist
+        let separators = [", ", " & ", " feat. ", " ft. ", " featuring "]
+        let first = separators.reduce(artist) { $0.components(separatedBy: $1).first ?? $0 }
+        return first.isEmpty ? artist : first
     }
 }
 

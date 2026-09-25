@@ -4,16 +4,16 @@ import MediaPlayer
 final class AppleMusicSource {
     private let player = MPMusicPlayerController.systemMusicPlayer
 
-    var isAuthorized: Bool {
-        MPMediaLibrary.authorizationStatus() == .authorized
-    }
+    /// Cached because every status check is an IPC round trip, and snapshots are taken every second.
+    private(set) var isAuthorized = MPMediaLibrary.authorizationStatus() == .authorized
 
     func requestAuthorization() async -> Bool {
-        await withCheckedContinuation { continuation in
+        isAuthorized = await withCheckedContinuation { continuation in
             MPMediaLibrary.requestAuthorization { status in
                 continuation.resume(returning: status == .authorized)
             }
         }
+        return isAuthorized
     }
 
     func snapshot() -> PlaybackSnapshot? {

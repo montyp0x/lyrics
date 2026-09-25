@@ -185,7 +185,8 @@ final class LyricsEngine {
 
     private func tick() {
         if let snapshot, case .synced(let lines) = lyrics {
-            let index = LRCParser.index(in: lines, at: snapshot.estimatedPosition() + lyricsOffset)
+            let position = snapshot.estimatedPosition() + lyricsOffset
+            let index = LRCParser.index(in: lines, at: position)
             if index != currentIndex { currentIndex = index }
         } else if currentIndex != nil {
             currentIndex = nil

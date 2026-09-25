@@ -38,14 +38,47 @@ struct LRCLibClient {
             if case .synced = fallback { return fallback! }
         }
 
-        let ranked = try await search(for: track).sorted {
-            Self.durationGap($0, track) < Self.durationGap($1, track)
+        // Entries are often filed under a different title/artist split, e.g. "Song (feat. X)" by "A"
+        // versus "Song" by "A feat. X", so try looser searches before settling for plain lyrics.
+        let title = Self.cleanTitle(track.title)
+        let searches: [[URLQueryItem]] = [
+            [URLQueryItem(name: "track_name", value: title), URLQueryItem(name: "artist_name", value: track.primaryArtist)],
+            [URLQueryItem(name: "q", value: "\(title) \(track.primaryArtist)")],
+        ]
+        var candidates: [Record] = []
+        var searchError: Error?
+        for query in searches {
+            do {
+                let records = try await search(query)
+                if let synced = Self.bestSynced(in: records, for: track) { return synced }
+                candidates += records
+            } catch {
+                searchError = error
+            }
         }
-        if let synced = ranked.first(where: { $0.syncedLyrics?.isEmpty == false && Self.durationGap($0, track) < 5 }),
-           let lookup = Self.lookup(from: synced) {
-            return lookup
-        }
-        return fallback ?? ranked.lazy.compactMap(Self.lookup(from:)).first ?? .notFound
+        if let lookup = fallback ?? candidates.lazy.compactMap(Self.lookup(from:)).first { return lookup }
+        if let searchError { throw searchError }
+        return .notFound
+    }
+
+    static func cleanTitle(_ title: String) -> String {
+        let cleaned = titleNoise
+            .reduce(title) { $0.replacing($1, with: "") }
+            .trimmingCharacters(in: .whitespaces)
+        return cleaned.isEmpty ? title : cleaned
+    }
+
+    private static let titleNoise: [Regex<AnyRegexOutput>] = [
+        #"\s*[\(\[](feat\.?|ft\.?|featuring|with)\s[^\)\]]*[\)\]]"#,
+        #"\s*[\(\[][^\)\]]*(remaster|version|edit|mono|stereo|deluxe)[^\)\]]*[\)\]]"#,
+        #"\s+-\s+[^-]*(remaster|version|edit|mono|stereo|live)[^-]*$"#,
+    ].map { try! Regex($0).ignoresCase() }
+
+    private static func bestSynced(in records: [Record], for track: Track) -> Lookup? {
+        records
+            .filter { $0.syncedLyrics?.isEmpty == false && durationGap($0, track) < 5 }
+            .min { durationGap($0, track) < durationGap($1, track) }
+            .flatMap(lookup(from:))
     }
 
     private func exactMatch(for track: Track) async throws -> Record? {
@@ -65,11 +98,7 @@ struct LRCLibClient {
         return try JSONDecoder().decode(Record.self, from: data)
     }
 
-    private func search(for track: Track) async throws -> [Record] {
-        let query = [
-            URLQueryItem(name: "track_name", value: track.title),
-            URLQueryItem(name: "artist_name", value: track.primaryArtist),
-        ]
+    private func search(_ query: [URLQueryItem]) async throws -> [Record] {
         let (data, status) = try await get("search", query: query)
         guard status == 200 else { throw Failure.http(status) }
         return try JSONDecoder().decode([Record].self, from: data)
