@@ -101,10 +101,11 @@ private struct StandByHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(state.title)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            Color.clear.frame(width: 32, height: 1)
-            Text(state.artist)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // Keeps both texts clear of the system icon StandBy draws at the top center.
+            Color.clear.frame(width: 64, height: 1)
+            Text(state.artist)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.6)
