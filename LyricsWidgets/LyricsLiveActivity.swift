@@ -103,7 +103,6 @@ private struct StandByHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(state.title)
-                .layoutPriority(1)
             Spacer(minLength: 24)
             Text(state.artist)
         }
