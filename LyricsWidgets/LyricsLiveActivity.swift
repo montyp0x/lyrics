@@ -101,10 +101,12 @@ private struct SongHeader: View {
         HStack(spacing: 6) {
             Image(systemName: state.isPlaying ? "waveform" : "pause.fill")
                 .foregroundStyle(.pink)
-            Text("\(state.title) · \(state.artist)")
+            Text(state.title)
                 .lineLimit(1)
-            Spacer()
-            Text(state.source)
+                .layoutPriority(1)
+            Spacer(minLength: 12)
+            Text(state.artist)
+                .lineLimit(1)
         }
         .font(font)
         .foregroundStyle(.white.opacity(0.7))
