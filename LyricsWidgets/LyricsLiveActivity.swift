@@ -107,11 +107,14 @@ private struct StandByHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(state.title)
-            Spacer(minLength: 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // The header shares a row with the system icon StandBy draws at the top center.
+            Color.clear.frame(width: 48, height: 1)
             Text(state.artist)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .lineLimit(1)
-        .minimumScaleFactor(0.6)
+        .minimumScaleFactor(0.5)
         .font(.headline)
         .foregroundStyle(.white.opacity(0.7))
     }
