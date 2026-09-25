@@ -35,7 +35,10 @@ struct LyricsLiveActivity: Widget {
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    LyricLinesView(state: context.state, currentFont: .headline, nextFont: .subheadline)
+                    LyricLinesView(state: context.state, sizes: [
+                        .init(current: 17, next: 15),
+                        .init(current: 15, next: 13),
+                    ])
                         .padding(.horizontal, 8)
                 }
             } compactLeading: {
@@ -61,19 +64,16 @@ private struct LockScreenLyricsView: View {
 
     var body: some View {
         if isStandBy {
-            // StandBy may scale this canvas, so fonts start large and shrink to whatever space is available.
+            // StandBy clips this view to the area below its own icon, so the header can't share the icon's row.
             VStack(alignment: .leading, spacing: 12) {
-                // StandBy draws the app icon in the top-left corner; share its row instead of sitting below it.
-                SongHeader(state: state, font: .headline, showsIcon: false)
-                    .padding(.leading, 40)
-                    .frame(height: 32)
-                LyricLinesView(
-                    state: state,
-                    currentFont: .system(size: 40, weight: .bold),
-                    nextFont: .system(size: 26, weight: .semibold),
-                    currentLineLimit: 3,
-                    nextLineLimit: 2
-                )
+                StandByHeader(state: state)
+                LyricLinesView(state: state, sizes: [
+                    .init(current: 40, next: 26),
+                    .init(current: 34, next: 23),
+                    .init(current: 28, next: 20),
+                    .init(current: 24, next: 18),
+                    .init(current: 20, next: 16),
+                ])
                 .frame(maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, 16)
@@ -82,13 +82,11 @@ private struct LockScreenLyricsView: View {
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 SongHeader(state: state, font: .caption)
-                LyricLinesView(
-                    state: state,
-                    currentFont: .title3.bold(),
-                    nextFont: .body,
-                    currentLineLimit: 2,
-                    nextLineLimit: 1
-                )
+                LyricLinesView(state: state, sizes: [
+                    .init(current: 20, next: 17),
+                    .init(current: 17, next: 15),
+                    .init(current: 15, next: 13),
+                ])
                 // Fixed height so the activity doesn't resize whenever a line wraps.
                 .frame(height: 76, alignment: .top)
             }
@@ -97,17 +95,31 @@ private struct LockScreenLyricsView: View {
     }
 }
 
+private struct StandByHeader: View {
+    let state: LyricsActivityAttributes.ContentState
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(state.title)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Color.clear.frame(width: 32, height: 1)
+            Text(state.artist)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .lineLimit(1)
+        .font(.headline)
+        .foregroundStyle(.white.opacity(0.7))
+    }
+}
+
 private struct SongHeader: View {
     let state: LyricsActivityAttributes.ContentState
     let font: Font
-    var showsIcon = true
 
     var body: some View {
         HStack(spacing: 6) {
-            if showsIcon {
-                Image(systemName: state.isPlaying ? "waveform" : "pause.fill")
-                    .foregroundStyle(.pink)
-            }
+            Image(systemName: state.isPlaying ? "waveform" : "pause.fill")
+                .foregroundStyle(.pink)
             Text(state.title)
                 .lineLimit(1)
                 .layoutPriority(1)
@@ -120,29 +132,42 @@ private struct SongHeader: View {
     }
 }
 
+/// Renders the current and next line at the largest size that fits without truncation.
 private struct LyricLinesView: View {
+    struct Sizes {
+        let current: CGFloat
+        let next: CGFloat
+    }
+
     let state: LyricsActivityAttributes.ContentState
-    let currentFont: Font
-    let nextFont: Font
-    var currentLineLimit = 2
-    var nextLineLimit = 1
+    /// Largest first. The last entry is the fallback and may still shrink or truncate.
+    let sizes: [Sizes]
 
     var body: some View {
+        ViewThatFits(in: .vertical) {
+            ForEach(sizes.indices, id: \.self) { index in
+                lines(sizes[index], isFallback: index == sizes.count - 1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func lines(_ size: Sizes, isFallback: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(state.currentLine)
-                .font(currentFont)
+                .font(.system(size: size.current, weight: .bold))
                 .foregroundStyle(.white)
-                .lineLimit(currentLineLimit)
-                .minimumScaleFactor(0.4)
+                .lineLimit(isFallback ? 3 : nil)
+                .minimumScaleFactor(isFallback ? 0.6 : 1)
                 .layoutPriority(1)
                 .id(state.currentLine)
                 .transition(.push(from: .bottom))
             if !state.nextLine.isEmpty {
                 Text(state.nextLine)
-                    .font(nextFont)
+                    .font(.system(size: size.next, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(nextLineLimit)
-                    .minimumScaleFactor(0.5)
+                    .lineLimit(isFallback ? 2 : nil)
+                    .minimumScaleFactor(isFallback ? 0.6 : 1)
                     .id("next-\(state.nextLine)")
                     .transition(.push(from: .bottom))
             }
