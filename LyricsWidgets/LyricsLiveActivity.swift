@@ -77,9 +77,9 @@ private struct LockScreenLyricsView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, 16)
-            // With margins disabled, StandBy clips about 16pt above this view's top edge; -12pt puts
-            // the header level with the system icon without clipping it.
-            .padding(.top, -12)
+            // With margins disabled, StandBy clips just above -10pt; that puts the header as close
+            // to the system icon's row as it can get without clipping the glyphs.
+            .padding(.top, -10)
             .padding(.bottom, 16)
             // StandBy sizes the view to its content and centers it, so claim the full 160pt
             // Live Activity height to keep the header pinned at the top.
