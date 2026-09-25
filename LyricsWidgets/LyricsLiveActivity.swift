@@ -63,7 +63,10 @@ private struct LockScreenLyricsView: View {
         if isStandBy {
             // StandBy may scale this canvas, so fonts start large and shrink to whatever space is available.
             VStack(alignment: .leading, spacing: 12) {
-                SongHeader(state: state, font: .headline)
+                // StandBy draws the app icon in the top-left corner; share its row instead of sitting below it.
+                SongHeader(state: state, font: .headline, showsIcon: false)
+                    .padding(.leading, 40)
+                    .frame(height: 32)
                 LyricLinesView(
                     state: state,
                     currentFont: .system(size: 40, weight: .bold),
@@ -73,7 +76,8 @@ private struct LockScreenLyricsView: View {
                 )
                 .frame(maxHeight: .infinity, alignment: .top)
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             VStack(alignment: .leading, spacing: 10) {
@@ -96,11 +100,14 @@ private struct LockScreenLyricsView: View {
 private struct SongHeader: View {
     let state: LyricsActivityAttributes.ContentState
     let font: Font
+    var showsIcon = true
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: state.isPlaying ? "waveform" : "pause.fill")
-                .foregroundStyle(.pink)
+            if showsIcon {
+                Image(systemName: state.isPlaying ? "waveform" : "pause.fill")
+                    .foregroundStyle(.pink)
+            }
             Text(state.title)
                 .lineLimit(1)
                 .layoutPriority(1)
