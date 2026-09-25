@@ -54,6 +54,7 @@ struct LyricsLiveActivity: Widget {
                     .foregroundStyle(.pink)
             }
         }
+        .contentMarginsDisabled()
     }
 }
 
@@ -64,7 +65,6 @@ private struct LockScreenLyricsView: View {
 
     var body: some View {
         if isStandBy {
-            // StandBy clips this view to the area below its own icon, so the header can't share the icon's row.
             VStack(alignment: .leading, spacing: 12) {
                 StandByHeader(state: state)
                 LyricLinesView(state: state, sizes: [
@@ -77,10 +77,14 @@ private struct LockScreenLyricsView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, 16)
+            // With margins disabled, StandBy clips about 16pt above this view's top edge; -12pt puts
+            // the header level with the system icon without clipping it.
+            .padding(.top, -12)
             .padding(.bottom, 16)
             // StandBy sizes the view to its content and centers it, so claim the full 160pt
             // Live Activity height to keep the header pinned at the top.
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .topLeading)
+            .ignoresSafeArea()
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 SongHeader(state: state, font: .caption)
