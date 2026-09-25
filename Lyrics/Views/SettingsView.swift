@@ -52,7 +52,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Live Activity")
                 } footer: {
-                    Text("Background mode plays silent audio so lyrics keep updating while the phone is locked. It uses a little extra battery.")
+                    Text("Background mode plays silent audio and keeps a coarse location session open, which iOS requires before it accepts Lock Screen updates from the background. It uses a little extra battery and shows the location indicator.")
                 }
 
                 Section {

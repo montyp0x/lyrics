@@ -29,7 +29,8 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiresFullScreen: true
         NSSupportsLiveActivities: true
-        UIBackgroundModes: [audio]
+        UIBackgroundModes: [audio, location]
+        NSLocationWhenInUseUsageDescription: Lyrics keeps a coarse location session open so iOS lets it update lyrics on the Lock Screen while it runs in the background. Your location isn't used or stored.
         NSAppleMusicUsageDescription: Lyrics reads what's playing in Apple Music to show synced lyrics.
         CFBundleURLTypes:
           - CFBundleURLName: com.ramych.lyrics

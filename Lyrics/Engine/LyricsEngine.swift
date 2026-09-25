@@ -49,6 +49,7 @@ final class LyricsEngine {
     @ObservationIgnored private let lrclib = LRCLibClient()
     @ObservationIgnored private let liveActivity = LiveActivityController()
     @ObservationIgnored private let keeper = BackgroundKeeper()
+    @ObservationIgnored private let locationKeeper = LocationKeeper()
     @ObservationIgnored private let spotify: SpotifyClient
     @ObservationIgnored private var appleSnapshot: PlaybackSnapshot?
     @ObservationIgnored private var spotifySnapshot: PlaybackSnapshot?
@@ -94,6 +95,7 @@ final class LyricsEngine {
     }
 
     func appDidBecomeActive() {
+        DiagnosticsLog.write("app became active")
         pollAppleMusic()
         tick()
     }
@@ -114,8 +116,15 @@ final class LyricsEngine {
         }
     }
 
+    @ObservationIgnored private var pollCount = 0
+
     private func pollAppleMusic() {
+        let previous = appleSnapshot
         appleSnapshot = appleMusic.snapshot()
+        pollCount += 1
+        if previous?.track != appleSnapshot?.track || previous?.isPlaying != appleSnapshot?.isPlaying || pollCount % 10 == 0 {
+            DiagnosticsLog.write("apple: \(appleSnapshot.map { "\($0.track.title) playing=\($0.isPlaying) pos=\(Int($0.position))" } ?? "nil")")
+        }
         refreshSnapshot()
     }
 
@@ -157,6 +166,7 @@ final class LyricsEngine {
     }
 
     private func loadLyrics(for track: Track) {
+        DiagnosticsLog.write("track change -> \(track.title) / \(track.artist)")
         loadedTrack = track
         currentIndex = nil
         lyricsTask?.cancel()
@@ -178,6 +188,7 @@ final class LyricsEngine {
                 result = .failed(error.localizedDescription)
             }
             guard !Task.isCancelled, loadedTrack == track else { return }
+            DiagnosticsLog.write("lyrics for \(track.title): \(String(describing: result).prefix(40))")
             if case .failed = result {} else { cache[track] = result }
             lyrics = result
         }
@@ -208,6 +219,12 @@ final class LyricsEngine {
     }
 
     private func updateKeepAlive() {
-        if keepAliveEnabled, !loops.isEmpty { keeper.start() } else { keeper.stop() }
+        if keepAliveEnabled, !loops.isEmpty {
+            keeper.start()
+            locationKeeper.start()
+        } else {
+            keeper.stop()
+            locationKeeper.stop()
+        }
     }
 }

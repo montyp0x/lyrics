@@ -12,6 +12,9 @@ final class LiveActivityController {
             lastState = nil
         }
         guard state != lastState else { return }
+        if state.title != lastState?.title {
+            DiagnosticsLog.write("activity \(activity.map { "\($0.activityState)" } ?? "nil") -> \(state.title): \(state.currentLine)")
+        }
 
         if let activity {
             lastState = state
@@ -38,7 +41,7 @@ final class LiveActivityController {
             )
             lastState = state
         } catch {
-            print("Live Activity request failed: \(error)")
+            DiagnosticsLog.write("activity request failed: \(error)")
         }
     }
 
