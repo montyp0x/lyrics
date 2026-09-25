@@ -78,7 +78,9 @@ private struct LockScreenLyricsView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // StandBy sizes the view to its content and centers it, so claim the full 160pt
+            // Live Activity height to keep the header pinned at the top.
+            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .topLeading)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 SongHeader(state: state, font: .caption)
@@ -101,11 +103,9 @@ private struct StandByHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(state.title)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            // Keeps both texts clear of the system icon StandBy draws at the top center.
-            Color.clear.frame(width: 64, height: 1)
+                .layoutPriority(1)
+            Spacer(minLength: 24)
             Text(state.artist)
-                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.6)
