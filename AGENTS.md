@@ -83,13 +83,15 @@ new activity appears only as a small icon until the user taps it. The user wants
 - `.contentMarginsDisabled()` on the configuration plus `.padding(.top, -10)` put the title/artist on the same
   row as the system icon StandBy draws at the top center. StandBy clips roughly 16 pt above the view, so
   going higher cuts off glyphs. A 48 pt gap in the middle of the header keeps text clear of that icon.
-- Lyric lines scroll like karaoke. `ContentState.lineIndex` identifies each line (`ForEach` ids), so on a
- line change the "next" line keeps its identity and animates into the "current" style, and the screen never
- goes blank. Long lines shrink with `minimumScaleFactor` instead of truncating. Don't wrap the lines in
- `ViewThatFits`: switching between its branches breaks line identity, and the whole block flashes.
-- **Don't add custom `.transition(...)`s to the Live Activity.** An asymmetric move combined with opacity froze
- the whole StandBy view, header included, for minutes. The widget still rendered each update "successfully";
- the screen just stopped changing. Let the system animate identity changes.
+- Lyric lines are two plain `Text`s whose view tree is identical for every update (no `ViewThatFits`, no `if`,
+ no `.id`/`.transition`), so a line change only swaps strings and cross-fades in place. Long lines shrink
+ with `minimumScaleFactor` instead of truncating. Anything that swaps subtrees flashes black: `ViewThatFits`
+ changing branch, or `.id(text)` + `.transition(.push)`.
+- **Don't animate lines by identity.** A karaoke scroll (`ForEach` keyed by line index, so "next" animates into
+ "current") froze the whole StandBy view, header included, for minutes. It froze with and without custom
+ transitions. Signs in the system log: the app keeps updating, SpringBoard logs `Activity did update` for
+ every update, and the widget renders each one, but the SpringBoard activity scene stops logging
+ `Scene did receive new client settings`.
 - The engine sends the Live Activity each line `liveActivityLead` (0.65 s) before it's sung, because updates take
  ~0.3 s to reach the screen. The in-app view uses the exact position.
 - The user iterates on StandBy visually: take a screenshot after they tap the StandBy icon, rather than
