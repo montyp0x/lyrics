@@ -61,8 +61,8 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
 - Live Activities can only be *started* while the app is in the foreground; the controller adopts an
   existing activity after relaunch.
 - **Reinstalling the app ends its Live Activity.** StandBy then falls back to Apple Music's player, and the
-  new activity appears only as a small icon until the user taps it. Batch UI changes, warn the user before
-  installing, and relaunch the app afterwards. StandBy glitches right after an install are expected.
+new activity appears only as a small icon until the user taps it. The user wants every working build
+ installed right away without asking; relaunch the app afterwards. StandBy glitches right after an install are expected.
 - Apple Music's own synced lyrics aren't accessible to third-party apps (no public API; `MPMediaItem.lyrics`
   only covers local files). Spotify's lyrics aren't in its Web API either. LRCLIB is the lyrics source.
 - LRCLIB often files songs under a different title/artist split ("Song (feat. X)" by A vs "Song" by
@@ -82,6 +82,14 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
   truncating with "…". Keep new text in the Live Activity following that pattern.
 - The user iterates on StandBy visually: take a screenshot after they tap the StandBy icon, rather than
   guessing offsets.
+
+## StandBy track controls
+
+- Live Activities get no gestures (and StandBy owns horizontal swipes), so skipping uses invisible
+ `Button(intent:)` zones over the left and right thirds; the middle third still opens the app.
+- `Shared/SkipTrackIntent.swift` is a `LiveActivityIntent` compiled into both targets but performed in the
+ app. The MediaPlayer code is behind `#if !WIDGET_EXTENSION` (flag set on the widget target in `project.yml`).
+- Apple Music only. Spotify skipping would need Premium plus the `user-modify-playback-state` scope.
 
 ## Conventions
 
