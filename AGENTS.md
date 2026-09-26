@@ -83,8 +83,12 @@ new activity appears only as a small icon until the user taps it. The user wants
 - `.contentMarginsDisabled()` on the configuration plus `.padding(.top, -10)` put the title/artist on the same
   row as the system icon StandBy draws at the top center. StandBy clips roughly 16 pt above the view, so
   going higher cuts off glyphs. A 48 pt gap in the middle of the header keeps text clear of that icon.
-- Lyric lines use `ViewThatFits` over a list of font sizes (largest first) so lines shrink instead of
-  truncating with "…". Keep new text in the Live Activity following that pattern.
+- Lyric lines scroll like karaoke. `ContentState.lineIndex` identifies each line (`ForEach` ids), so on a
+ line change the "next" line keeps its identity and animates into the "current" style, and the screen never
+ goes blank. Long lines shrink with `minimumScaleFactor` instead of truncating. Don't wrap the lines in
+ `ViewThatFits`: switching between its branches breaks line identity, and the whole block flashes.
+- The engine sends the Live Activity each line `liveActivityLead` (0.65 s) before it's sung, because updates take
+ ~0.3 s to reach the screen. The in-app view uses the exact position.
 - The user iterates on StandBy visually: take a screenshot after they tap the StandBy icon, rather than
   guessing offsets.
 

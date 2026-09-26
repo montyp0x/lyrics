@@ -60,9 +60,9 @@ final class LyricsEngine {
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var playerCommandToken: Int32 = 0
     @ObservationIgnored private var liveActivityIndex: Int?
-    /// A Live Activity update takes ~0.3 s to reach the screen (the widget extension re-renders it), so the
-    /// activity is sent each line this much before it's sung.
-    private static let liveActivityLead: TimeInterval = 0.35
+    /// A Live Activity update takes ~0.3 s to reach the screen (the widget extension re-renders it), and a line
+    /// reads best slightly before it's sung, so the activity gets each line this much early.
+    private static let liveActivityLead: TimeInterval = 0.65
 
     init() {
         let defaults = UserDefaults.standard
@@ -243,6 +243,7 @@ final class LyricsEngine {
             artist: snapshot.track.artist,
             currentLine: lines.current,
             nextLine: lines.next,
+            lineIndex: liveActivityIndex ?? -1,
             isPlaying: snapshot.isPlaying,
             source: snapshot.source.displayName
         ))

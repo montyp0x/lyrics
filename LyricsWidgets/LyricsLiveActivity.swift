@@ -36,10 +36,7 @@ struct LyricsLiveActivity: Widget {
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    LyricLinesView(state: context.state, sizes: [
-                        .init(current: 17, next: 15),
-                        .init(current: 15, next: 13),
-                    ])
+                    LyricLinesView(state: context.state, currentSize: 17, nextSize: 15)
                         .padding(.horizontal, 8)
                 }
             } compactLeading: {
@@ -68,14 +65,8 @@ private struct LockScreenLyricsView: View {
         if isStandBy {
             VStack(alignment: .leading, spacing: 12) {
                 StandByHeader(state: state)
-                LyricLinesView(state: state, sizes: [
-                    .init(current: 40, next: 26),
-                    .init(current: 34, next: 23),
-                    .init(current: 28, next: 20),
-                    .init(current: 24, next: 18),
-                    .init(current: 20, next: 16),
-                ])
-                .frame(maxHeight: .infinity, alignment: .top)
+                LyricLinesView(state: state, currentSize: 40, nextSize: 26)
+                    .frame(maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, 16)
             // With margins disabled, StandBy clips just above -10pt; that puts the header as close
@@ -94,11 +85,7 @@ private struct LockScreenLyricsView: View {
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 SongHeader(state: state, font: .caption)
-                LyricLinesView(state: state, sizes: [
-                    .init(current: 20, next: 17),
-                    .init(current: 17, next: 15),
-                    .init(current: 15, next: 13),
-                ])
+                LyricLinesView(state: state, currentSize: 20, nextSize: 17)
                 // Fixed height so the activity doesn't resize whenever a line wraps.
                 .frame(height: 76, alignment: .top)
             }
@@ -166,44 +153,31 @@ private struct SongHeader: View {
     }
 }
 
-/// Renders the current and next line at the largest size that fits without truncation.
+/// Renders the current and next line, scrolling like karaoke: lines are identified by their index, so on a
+/// line change the next line stays on screen and grows into the current one while the old line leaves upward.
 private struct LyricLinesView: View {
-    struct Sizes {
-        let current: CGFloat
-        let next: CGFloat
-    }
-
     let state: LyricsActivityAttributes.ContentState
-    /// Largest first. The last entry is the fallback and may still shrink or truncate.
-    let sizes: [Sizes]
+    let currentSize: CGFloat
+    let nextSize: CGFloat
+
+    private var lines: [(id: Int, text: String)] {
+        var lines = [(id: state.lineIndex, text: state.currentLine)]
+        if !state.nextLine.isEmpty { lines.append((id: state.lineIndex + 1, text: state.nextLine)) }
+        return lines
+    }
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            ForEach(sizes.indices, id: \.self) { index in
-                lines(sizes[index], isFallback: index == sizes.count - 1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func lines(_ size: Sizes, isFallback: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(state.currentLine)
-                .font(.system(size: size.current, weight: .bold))
-                .foregroundStyle(.white)
-                .lineLimit(isFallback ? 3 : nil)
-                .minimumScaleFactor(isFallback ? 0.6 : 1)
-                .layoutPriority(1)
-                .id(state.currentLine)
-                .transition(.push(from: .bottom))
-            if !state.nextLine.isEmpty {
-                Text(state.nextLine)
-                    .font(.system(size: size.next, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(isFallback ? 2 : nil)
-                    .minimumScaleFactor(isFallback ? 0.6 : 1)
-                    .id("next-\(state.nextLine)")
-                    .transition(.push(from: .bottom))
+            ForEach(lines, id: \.id) { line in
+                let isCurrent = line.id == state.lineIndex
+                Text(line.text)
+                    .font(.system(size: isCurrent ? currentSize : nextSize, weight: isCurrent ? .bold : .semibold))
+                    .foregroundStyle(.white.opacity(isCurrent ? 1 : 0.5))
+                    // Shrink long lines instead of truncating them with "…".
+                    .lineLimit(isCurrent ? 3 : 2)
+                    .minimumScaleFactor(0.5)
+                    .layoutPriority(isCurrent ? 1 : 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
