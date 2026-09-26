@@ -242,7 +242,9 @@ final class LyricsEngine {
             title: snapshot.track.title,
             artist: snapshot.track.artist,
             currentLine: lines.current,
-            nextLine: lines.next,            isPlaying: snapshot.isPlaying,
+            nextLine: lines.next,
+            lineIndex: liveActivityIndex ?? -1,
+            isPlaying: snapshot.isPlaying,
             source: snapshot.source.displayName
         ))
     }
