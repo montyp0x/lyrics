@@ -12,6 +12,8 @@ extension Notification.Name {
 struct SkipTrackIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Skip Track"
     static var isDiscoverable = false
+    static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+    static var openAppWhenRun = false
 
     @Parameter(title: "Forward")
     var forward: Bool
