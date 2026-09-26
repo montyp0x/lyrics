@@ -59,6 +59,10 @@ final class LyricsEngine {
     @ObservationIgnored private var lyricsTask: Task<Void, Never>?
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var playerCommandToken: Int32 = 0
+    @ObservationIgnored private var liveActivityIndex: Int?
+    /// A Live Activity update takes ~0.3 s to reach the screen (the widget extension re-renders it), so the
+    /// activity is sent each line this much before it's sung.
+    private static let liveActivityLead: TimeInterval = 0.35
 
     init() {
         let defaults = UserDefaults.standard
@@ -88,8 +92,8 @@ final class LyricsEngine {
             },
             Task { [weak self] in
                 while !Task.isCancelled {
-                    self?.tick()
-                    try? await Task.sleep(for: .milliseconds(200))
+                    let delay = self?.tick() ?? 0.2
+                    try? await Task.sleep(for: .seconds(delay))
                 }
             },
         ]
@@ -108,10 +112,11 @@ final class LyricsEngine {
         tick()
     }
 
-    var displayLines: (current: String, next: String) {
+    /// Lines for the Live Activity, which runs `liveActivityLead` ahead of the in-app view.
+    private func displayLines(at index: Int?) -> (current: String, next: String) {
         switch lyrics {
         case .synced(let lines):
-            guard let index = currentIndex else { return ("♪", lines.first?.text ?? "") }
+            guard let index else { return ("♪", lines.first?.text ?? "") }
             let current = lines[index].text.isEmpty ? "♪" : lines[index].text
             let next = index + 1 < lines.count ? lines[index + 1].text : ""
             return (current, next)
@@ -130,6 +135,12 @@ final class LyricsEngine {
         let previous = appleSnapshot
         appleSnapshot = appleMusic.snapshot()
         pollCount += 1
+        if let previous, let current = appleSnapshot, previous.track == current.track, previous.isPlaying, current.isPlaying {
+            let drift = current.position - previous.estimatedPosition(at: current.capturedAt)
+            if abs(drift) > 0.15 {
+                DiagnosticsLog.write("apple drift \(String(format: "%+.2f", drift)) s at pos \(String(format: "%.2f", current.position))")
+            }
+        }
         if previous?.track != appleSnapshot?.track || previous?.isPlaying != appleSnapshot?.isPlaying || pollCount % 10 == 0 {
             DiagnosticsLog.write("apple: \(appleSnapshot.map { "\($0.track.title) playing=\($0.isPlaying) pos=\(Int($0.position))" } ?? "nil")")
         }
@@ -202,20 +213,31 @@ final class LyricsEngine {
         }
     }
 
-    private func tick() {
+    /// Updates the current lines and returns how long to wait before the next line change (capped at 200 ms).
+    private func tick() -> TimeInterval {
+        var delay = 0.2
         if let snapshot, case .synced(let lines) = lyrics {
             let position = snapshot.estimatedPosition() + lyricsOffset
             let index = LRCParser.index(in: lines, at: position)
             if index != currentIndex { currentIndex = index }
-        } else if currentIndex != nil {
-            currentIndex = nil
+            liveActivityIndex = LRCParser.index(in: lines, at: position + Self.liveActivityLead)
+            if snapshot.isPlaying {
+                for boundary in [position, position + Self.liveActivityLead] {
+                    let next = (LRCParser.index(in: lines, at: boundary)).map { $0 + 1 } ?? 0
+                    if next < lines.count { delay = min(delay, lines[next].time - boundary) }
+                }
+            }
+        } else {
+            if currentIndex != nil { currentIndex = nil }
+            liveActivityIndex = nil
         }
         pushLiveActivity()
+        return max(delay, 0.01)
     }
 
     private func pushLiveActivity() {
         guard liveActivityEnabled, let snapshot else { return }
-        let lines = displayLines
+        let lines = displayLines(at: liveActivityIndex)
         liveActivity.update(LyricsActivityAttributes.ContentState(
             title: snapshot.track.title,
             artist: snapshot.track.artist,
