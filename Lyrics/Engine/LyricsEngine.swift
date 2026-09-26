@@ -90,6 +90,12 @@ final class LyricsEngine {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
             },
+            Task { [weak self] in
+                for await _ in NotificationCenter.default.notifications(named: .trackSkipped) {
+                    DiagnosticsLog.write("skip from live activity")
+                    self?.pollAppleMusic()
+                }
+            },
         ]
         updateKeepAlive()
     }

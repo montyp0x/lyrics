@@ -84,6 +84,11 @@ private struct LockScreenLyricsView: View {
             // StandBy sizes the view to its content and centers it, so claim the full 160pt
             // Live Activity height to keep the header pinned at the top.
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .topLeading)
+            .overlay {
+                if state.source == "Apple Music" {
+                    SkipTapZones()
+                }
+            }
             .ignoresSafeArea()
         } else {
             VStack(alignment: .leading, spacing: 10) {
@@ -98,6 +103,26 @@ private struct LockScreenLyricsView: View {
             }
             .padding()
         }
+    }
+}
+
+/// Invisible buttons over the left and right thirds; the middle third still opens the app.
+private struct SkipTapZones: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            zone(forward: false)
+            Color.clear.frame(maxWidth: .infinity)
+            zone(forward: true)
+        }
+    }
+
+    private func zone(forward: Bool) -> some View {
+        Button(intent: SkipTrackIntent(forward: forward)) {
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
