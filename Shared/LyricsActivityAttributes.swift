@@ -1,8 +1,8 @@
 import ActivityKit
 import Foundation
 
-/// Darwin notification the widget extension posts after skipping, so the app refreshes immediately.
-let trackSkippedNotification = "com.ramych.lyrics.trackSkipped"
+/// Darwin notification the widget extension posts after a player command, so the app refreshes immediately.
+let playerCommandNotification = "com.ramych.lyrics.playerCommand"
 
 struct LyricsActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {

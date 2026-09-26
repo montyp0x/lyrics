@@ -90,10 +90,10 @@ new activity appears only as a small icon until the user taps it. The user wants
 
 ## StandBy track controls
 
-- Live Activities get no gestures (and StandBy owns horizontal swipes), so skipping uses invisible
- `Button(intent:)` zones over the left and right thirds; the middle third still opens the app.
-- `LyricsWidgets/SkipTrackIntent.swift` is a plain `AppIntent` that runs in the widget extension and skips via
- `MPMusicPlayerController.systemMusicPlayer`, then posts a Darwin notification so the app polls immediately.
+- Live Activities get no gestures, and StandBy uses horizontal swipes itself. So the StandBy view has three
+ invisible `Button(intent:)` zones instead: left third = previous, middle = play/pause, right = next.
+- `LyricsWidgets/PlayerIntents.swift` holds plain `AppIntent`s that run in the widget extension and drive
+ `MPMusicPlayerController.systemMusicPlayer`, then post a Darwin notification so the app polls immediately.
  Don't make it a `LiveActivityIntent`/`AudioPlaybackIntent`: those run in the app process, and iOS launches the
  app through the Shortcuts runner, which also asks for Face ID.
 - **On a locked phone, StandBy always asks for Face ID before the first tap on any third-party widget or

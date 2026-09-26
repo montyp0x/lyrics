@@ -58,7 +58,7 @@ final class LyricsEngine {
     @ObservationIgnored private var cache: [Track: LyricsState] = [:]
     @ObservationIgnored private var lyricsTask: Task<Void, Never>?
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
-    @ObservationIgnored private var skipToken: Int32 = 0
+    @ObservationIgnored private var playerCommandToken: Int32 = 0
 
     init() {
         let defaults = UserDefaults.standard
@@ -93,9 +93,9 @@ final class LyricsEngine {
                 }
             },
         ]
-        notify_register_dispatch(trackSkippedNotification, &skipToken, .main) { [weak self] _ in
+        notify_register_dispatch(playerCommandNotification, &playerCommandToken, .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                DiagnosticsLog.write("skip from live activity")
+                DiagnosticsLog.write("player command from live activity")
                 self?.pollAppleMusic()
             }
         }

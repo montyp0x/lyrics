@@ -1,4 +1,5 @@
 import ActivityKit
+import AppIntents
 import SwiftUI
 import WidgetKit
 
@@ -86,7 +87,7 @@ private struct LockScreenLyricsView: View {
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .topLeading)
             .overlay {
                 if state.source == "Apple Music" {
-                    SkipTapZones()
+                    PlayerTapZones()
                 }
             }
             .ignoresSafeArea()
@@ -106,18 +107,18 @@ private struct LockScreenLyricsView: View {
     }
 }
 
-/// Invisible buttons over the left and right thirds; the middle third still opens the app.
-private struct SkipTapZones: View {
+/// Invisible buttons over the thirds of the view: previous, play/pause, next.
+private struct PlayerTapZones: View {
     var body: some View {
         HStack(spacing: 0) {
-            zone(forward: false)
-            Color.clear.frame(maxWidth: .infinity)
-            zone(forward: true)
+            zone(SkipTrackIntent(forward: false))
+            zone(TogglePlaybackIntent())
+            zone(SkipTrackIntent(forward: true))
         }
     }
 
-    private func zone(forward: Bool) -> some View {
-        Button(intent: SkipTrackIntent(forward: forward)) {
+    private func zone(_ intent: some AppIntent) -> some View {
+        Button(intent: intent) {
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
