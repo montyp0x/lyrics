@@ -44,8 +44,8 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
 - App diagnostics: `xcrun devicectl device copy from --device $D --domain-type appDataContainer
   --domain-identifier com.ramych.lyrics --source Documents/diagnostics.log --destination diag.log`.
 - Crash reports: `--domain-type systemCrashLogs --source /`.
-- The system log needs root, so ask the user to run
-  `sudo log collect --device-udid $D --last 5m --output /tmp/lyricslogs/x.logarchive`, then inspect it
+- The system log needs root. A sudoers rule (`/etc/sudoers.d/lyrics-logcollect`) allows it without a password, so run
+ `sudo -n /usr/bin/log collect --device-udid $D --last 5m --output /tmp/lyricslogs/x.logarchive` yourself, then inspect it
   with `/usr/bin/log show` (plain `log` is a zsh builtin). Useful processes: `liveactivitiesd`, `SpringBoard`, `runningboardd`.
 - Foundation-only code (`LyricsData/`, `Playback/Models.swift`) can be compiled and run on macOS with
   `xcrun swiftc -parse-as-library` plus a small `main.swift` to test against live LRCLIB.
@@ -63,6 +63,11 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
 - **Reinstalling the app ends its Live Activity.** StandBy then falls back to Apple Music's player, and the
 new activity appears only as a small icon until the user taps it. The user wants every working build
  installed right away without asking; relaunch the app afterwards. StandBy glitches right after an install are expected.
+- **If the Live Activity never appears after an install, check for a stale widget registration.** Look in the
+ system log: when `launchd` logs `Attempt to re-bootstrap service from different path, will use existing` for
+ `com.ramych.lyrics.widgets`, followed by `No such file or directory` for the old bundle path, `chronod` is still
+ pointing at the deleted install. `chronod` logs `Archive was nil` and StandBy shows nothing. Only a reboot
+ fixes it: `xcrun devicectl device reboot --device $D`.
 - Apple Music's own synced lyrics aren't accessible to third-party apps (no public API; `MPMediaItem.lyrics`
   only covers local files). Spotify's lyrics aren't in its Web API either. LRCLIB is the lyrics source.
 - LRCLIB often files songs under a different title/artist split ("Song (feat. X)" by A vs "Song" by
@@ -87,8 +92,14 @@ new activity appears only as a small icon until the user taps it. The user wants
 
 - Live Activities get no gestures (and StandBy owns horizontal swipes), so skipping uses invisible
  `Button(intent:)` zones over the left and right thirds; the middle third still opens the app.
-- `Shared/SkipTrackIntent.swift` is a `LiveActivityIntent` compiled into both targets but performed in the
- app. The MediaPlayer code is behind `#if !WIDGET_EXTENSION` (flag set on the widget target in `project.yml`).
+- `LyricsWidgets/SkipTrackIntent.swift` is a plain `AppIntent` that runs in the widget extension and skips via
+ `MPMusicPlayerController.systemMusicPlayer`, then posts a Darwin notification so the app polls immediately.
+ Don't make it a `LiveActivityIntent`/`AudioPlaybackIntent`: those run in the app process, and iOS launches the
+ app through the Shortcuts runner, which also asks for Face ID.
+- **On a locked phone, StandBy always asks for Face ID before the first tap on any third-party widget or
+ Live Activity.** SpringBoard's `AmbientAuthentication` does this before the intent is dispatched, and
+ `authenticationPolicy` doesn't affect it. After one authentication, taps work for 10 minutes. This can't be
+ worked around.
 - Apple Music only. Spotify skipping would need Premium plus the `user-modify-playback-state` scope.
 
 ## Conventions

@@ -1,4 +1,5 @@
 import Foundation
+import notify
 import Observation
 
 enum LyricsState: Equatable {
@@ -57,6 +58,7 @@ final class LyricsEngine {
     @ObservationIgnored private var cache: [Track: LyricsState] = [:]
     @ObservationIgnored private var lyricsTask: Task<Void, Never>?
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
+    @ObservationIgnored private var skipToken: Int32 = 0
 
     init() {
         let defaults = UserDefaults.standard
@@ -90,13 +92,13 @@ final class LyricsEngine {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
             },
-            Task { [weak self] in
-                for await _ in NotificationCenter.default.notifications(named: .trackSkipped) {
-                    DiagnosticsLog.write("skip from live activity")
-                    self?.pollAppleMusic()
-                }
-            },
         ]
+        notify_register_dispatch(trackSkippedNotification, &skipToken, .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                DiagnosticsLog.write("skip from live activity")
+                self?.pollAppleMusic()
+            }
+        }
         updateKeepAlive()
     }
 

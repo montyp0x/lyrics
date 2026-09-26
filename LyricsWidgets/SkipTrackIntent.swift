@@ -1,15 +1,14 @@
 import AppIntents
 import Foundation
-#if !WIDGET_EXTENSION
 import MediaPlayer
-#endif
+import notify
 
-extension Notification.Name {
-    static let trackSkipped = Notification.Name("trackSkipped")
-}
-
-/// Skips the Apple Music queue from the Live Activity. Runs in the app process.
-struct SkipTrackIntent: LiveActivityIntent {
+/// Skips the Apple Music queue from the Live Activity.
+///
+/// A plain `AppIntent` so it runs in the widget extension. `LiveActivityIntent` and
+/// `AudioPlaybackIntent` run in the app process, and launching the app from a locked
+/// phone makes iOS ask for Face ID first.
+struct SkipTrackIntent: AppIntent {
     static var title: LocalizedStringResource = "Skip Track"
     static var isDiscoverable = false
     static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
@@ -26,15 +25,13 @@ struct SkipTrackIntent: LiveActivityIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        #if !WIDGET_EXTENSION
         let player = MPMusicPlayerController.systemMusicPlayer
         if forward {
             player.skipToNextItem()
         } else {
             player.skipToPreviousItem()
         }
-        NotificationCenter.default.post(name: .trackSkipped, object: nil)
-        #endif
+        notify_post(trackSkippedNotification)
         return .result()
     }
 }
