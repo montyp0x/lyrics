@@ -124,6 +124,7 @@ final class LyricsEngine {
 
     func appDidBecomeActive() {
         DiagnosticsLog.write("app became active")
+        liveActivity.appDidBecomeActive()
         pollAppleMusic()
         tick()
     }

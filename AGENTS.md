@@ -58,8 +58,15 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
   `liveactivitiesd` logs `Process is only playing background media so is forbidden to update activity`.
   The fix is `LocationKeeper` (a coarse `CLBackgroundActivitySession`), which gives the app another background
   reason. Silent audio alone is not enough. Do not remove either keeper.
-- Live Activities can only be *started* while the app is in the foreground; the controller adopts an
-  existing activity after relaunch.
+- **"Frozen" lyrics in StandBy after long sessions: iOS ends every Live Activity 8 hours after it starts.** The
+ last content stays on screen for up to 4 more hours, so it looks frozen. Confirmed in the app log: an activity
+ started at about 03:25 went `nil` at 11:25:41 while the app was in the background, and stayed gone until the
+ app was opened at 12:30. `LiveActivityController` now replaces an ended activity (retrying from the background
+ at most once a minute), starts a fresh one when the app is opened with an activity older than an hour, and
+ ends replaced activities immediately. It logs each activity's state changes with its age.
+- Live Activities are documented as startable only from the foreground; the controller adopts an existing
+ activity after relaunch. Check the log (`activity request failed (background)` or `activity started from
+ background`) to see whether a background start was accepted.
 - **Reinstalling the app ends its Live Activity.** StandBy then falls back to Apple Music's player, and the
 new activity appears only as a small icon until the user taps it. The user wants every working build
  installed right away without asking; relaunch the app afterwards. StandBy glitches right after an install are expected.
