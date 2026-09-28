@@ -180,7 +180,8 @@ private struct LyricLinesView: View {
 }
 
 /// StandBy: lines are identified by their index, so on a line change the next line stays on screen and
-/// grows into the current one while the old line leaves upward.
+/// moves up into the current slot. Font size and opacity are the only things that differ between slots;
+/// line limit and weight stay fixed so the layout can interpolate instead of reflowing mid-move.
 private struct KaraokeLinesView: View {
     let state: LyricsActivityAttributes.ContentState
     let currentSize: CGFloat
@@ -197,14 +198,15 @@ private struct KaraokeLinesView: View {
             ForEach(lines, id: \.id) { line in
                 let isCurrent = line.id == state.lineIndex
                 Text(line.text)
-                    .font(.system(size: isCurrent ? currentSize : nextSize, weight: isCurrent ? .bold : .semibold))
+                    .font(.system(size: isCurrent ? currentSize : nextSize, weight: .bold))
                     .foregroundStyle(.white.opacity(isCurrent ? 1 : 0.5))
-                    .lineLimit(isCurrent ? 3 : 2)
+                    .lineLimit(3)
                     .minimumScaleFactor(0.5)
-                    .layoutPriority(isCurrent ? 1 : 0)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .geometryGroup()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.35), value: state.lineIndex)
     }
 }
