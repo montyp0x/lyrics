@@ -180,36 +180,49 @@ private struct LyricLinesView: View {
 }
 
 /// StandBy: lines are identified by their index, so on a line change the next line stays on screen and
-/// moves up into the current slot. The arriving line eases in slowly; the departing line fades out fast.
+/// moves up into the current slot. The line after that is already in the tree, invisible, so the gray
+/// preview fades in instead of popping into place. The previous line still fades out fast.
 /// Line limit and weight stay fixed so the text doesn't reflow mid-move.
 private struct KaraokeLinesView: View {
     let state: LyricsActivityAttributes.ContentState
     let currentSize: CGFloat
     let nextSize: CGFloat
 
-    /// How the arriving line grows and brightens.
+    private enum Role {
+        case current, next, upcoming
+    }
+
+    /// How an arriving line fades in, and how the current line grows and brightens.
     private static let appear = Animation.smooth(duration: 1.0, extraBounce: 0)
     /// How quickly the previous line is gone.
     private static let depart = Animation.easeOut(duration: 0.2)
 
-    private var lines: [(id: Int, text: String)] {
-        var lines = [(id: state.lineIndex, text: state.currentLine)]
-        if !state.nextLine.isEmpty { lines.append((id: state.lineIndex + 1, text: state.nextLine)) }
+    private var lines: [(id: Int, text: String, role: Role)] {
+        var lines: [(id: Int, text: String, role: Role)] = [
+            (id: state.lineIndex, text: state.currentLine, role: .current),
+        ]
+        if !state.nextLine.isEmpty {
+            lines.append((id: state.lineIndex + 1, text: state.nextLine, role: .next))
+        }
+        if !state.upcomingLine.isEmpty {
+            lines.append((id: state.lineIndex + 2, text: state.upcomingLine, role: .upcoming))
+        }
         return lines
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(lines, id: \.id) { line in
-                let isCurrent = line.id == state.lineIndex
                 Text(line.text)
-                    .font(.system(size: isCurrent ? currentSize : nextSize, weight: .bold))
-                    .foregroundStyle(.white.opacity(isCurrent ? 1 : 0.5))
+                    .font(.system(size: line.role == .current ? currentSize : nextSize, weight: .bold))
+                    .foregroundStyle(.white.opacity(opacity(for: line.role)))
                     .lineLimit(3)
                     .minimumScaleFactor(0.5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: line.role == .upcoming ? 0 : 220, alignment: .topLeading)
+                    .clipped()
+                    .padding(.bottom, line.role == .upcoming ? 0 : 4)
                     .geometryGroup()
-                    .animation(Self.appear, value: isCurrent)
+                    .animation(Self.appear, value: line.role)
                     .transition(.asymmetric(
                         insertion: .opacity.animation(Self.appear),
                         removal: .opacity.animation(Self.depart)
@@ -218,5 +231,13 @@ private struct KaraokeLinesView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(Self.depart, value: state.lineIndex)
+    }
+
+    private func opacity(for role: Role) -> Double {
+        switch role {
+        case .current: 1
+        case .next: 0.5
+        case .upcoming: 0
+        }
     }
 }

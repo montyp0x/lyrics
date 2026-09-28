@@ -140,19 +140,22 @@ final class LyricsEngine {
     }
 
     /// Lines for the Live Activity, which runs `liveActivityLead` ahead of the in-app view.
-    private func displayLines(at index: Int?) -> (current: String, next: String) {
+    private func displayLines(at index: Int?) -> (current: String, next: String, upcoming: String) {
         switch lyrics {
         case .synced(let lines):
-            guard let index else { return ("♪", lines.first?.text ?? "") }
+            guard let index else {
+                return ("♪", lines.first?.text ?? "", lines.count > 1 ? lines[1].text : "")
+            }
             let current = lines[index].text.isEmpty ? "♪" : lines[index].text
             let next = index + 1 < lines.count ? lines[index + 1].text : ""
-            return (current, next)
-        case .loading: return ("Loading lyrics…", "")
-        case .plain: return ("Lyrics aren't synced for this song", "")
-        case .instrumental: return ("♪ Instrumental", "")
-        case .notFound: return ("No lyrics found", "")
-        case .failed: return ("Couldn't load lyrics", "")
-        case .idle: return ("", "")
+            let upcoming = index + 2 < lines.count ? lines[index + 2].text : ""
+            return (current, next, upcoming)
+        case .loading: return ("Loading lyrics…", "", "")
+        case .plain: return ("Lyrics aren't synced for this song", "", "")
+        case .instrumental: return ("♪ Instrumental", "", "")
+        case .notFound: return ("No lyrics found", "", "")
+        case .failed: return ("Couldn't load lyrics", "", "")
+        case .idle: return ("", "", "")
         }
     }
 
@@ -327,6 +330,7 @@ final class LyricsEngine {
             artist: snapshot.track.artist,
             currentLine: lines.current,
             nextLine: lines.next,
+            upcomingLine: lines.upcoming,
             lineIndex: liveActivityIndex ?? -1,
             isPlaying: snapshot.isPlaying,
             source: snapshot.source.displayName
