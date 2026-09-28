@@ -207,6 +207,6 @@ private struct KaraokeLinesView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.easeInOut(duration: 0.35), value: state.lineIndex)
+        .animation(.smooth(duration: 0.8, extraBounce: 0), value: state.lineIndex)
     }
 }
