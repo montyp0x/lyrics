@@ -4,8 +4,9 @@ import UIKit
 /// Starts, updates, and replaces the lyrics Live Activity.
 ///
 /// iOS ends a Live Activity 8 hours after it starts but leaves its last content on screen, which looks like
-/// frozen lyrics. So the controller replaces an activity that has ended, retrying from the background, and
-/// starts a fresh one whenever the app comes to the foreground with an activity older than an hour.
+/// frozen lyrics, and only a foreground app can start a new one. So the controller removes an ended activity
+/// and posts a notification to reopen the app, and starts a fresh activity whenever the app comes to the
+/// foreground with one older than an hour.
 @MainActor
 final class LiveActivityController {
     private var activity: Activity<LyricsActivityAttributes>?
@@ -14,15 +15,19 @@ final class LiveActivityController {
     private var lastLogKey: String?
     /// Set when the current activity should be replaced rather than adopted again.
     private var wantsFreshActivity = false
-    private var lastStartAttempt: Date?
     private var lastStartError: String?
 
     private static let refreshAge: TimeInterval = 60 * 60
-    private static let backgroundRetryInterval: TimeInterval = 60
 
     func update(_ state: LyricsActivityAttributes.ContentState) {
         if let activity, activity.activityState == .ended || activity.activityState == .dismissed {
             DiagnosticsLog.write("activity \(activity.id.prefix(8)) is \(activity.activityState), age \(age(of: activity))")
+            if activity.activityState == .ended {
+                // Ended by iOS (8-hour limit). Its last content would stay on screen like frozen lyrics, and a
+                // replacement can't be started from the background, so remove it and ask the user to reopen.
+                Task { await activity.end(nil, dismissalPolicy: .immediate) }
+                if UIApplication.shared.applicationState != .active { ResumeNotification.post() }
+            }
             self.activity = nil
             lastState = nil
         }
@@ -60,7 +65,6 @@ final class LiveActivityController {
             self.activity = nil
             lastState = nil
         }
-        lastStartAttempt = nil
     }
 
     func end() {
@@ -75,12 +79,8 @@ final class LiveActivityController {
     }
 
     private func start(with state: LyricsActivityAttributes.ContentState) {
-        let inForeground = UIApplication.shared.applicationState == .active
-        // Starting from the background may be refused; don't retry on every tick.
-        if !inForeground, let last = lastStartAttempt, Date.now.timeIntervalSince(last) < Self.backgroundRetryInterval {
-            return
-        }
-        lastStartAttempt = .now
+        // From the background, `Activity.request` fails with a "visibility" error (tested on iOS 18).
+        guard UIApplication.shared.applicationState == .active else { return }
         do {
             let created = try Activity.request(
                 attributes: LyricsActivityAttributes(),
@@ -92,7 +92,7 @@ final class LiveActivityController {
             wantsFreshActivity = false
             lastStartError = nil
             observe(created, adopted: false)
-            DiagnosticsLog.write("activity started from \(inForeground ? "foreground" : "background")")
+            ResumeNotification.remove()
             // Remove replaced or expired activities so their stale content doesn't linger on screen.
             let others = Activity<LyricsActivityAttributes>.activities.filter { $0.id != created.id }
             Task {
@@ -106,7 +106,7 @@ final class LiveActivityController {
             let message = "\(error)"
             if message != lastStartError {
                 lastStartError = message
-                DiagnosticsLog.write("activity request failed (\(inForeground ? "foreground" : "background")): \(message)")
+                DiagnosticsLog.write("activity request failed: \(message)")
             }
         }
     }

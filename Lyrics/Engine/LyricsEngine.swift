@@ -93,6 +93,7 @@ final class LyricsEngine {
 
     func start() {
         guard loops.isEmpty else { return }
+        ResumeNotification.requestAuthorization()
         loops = [
             Task { [weak self] in
                 while !Task.isCancelled {
