@@ -22,7 +22,8 @@ final class AppleMusicSource {
             title: title,
             artist: item.artist ?? "",
             album: item.albumTitle ?? "",
-            duration: item.playbackDuration
+            duration: item.playbackDuration,
+            appleMusicID: ["", "0"].contains(item.playbackStoreID) ? nil : item.playbackStoreID
         )
         let position = player.currentPlaybackTime
         return PlaybackSnapshot(

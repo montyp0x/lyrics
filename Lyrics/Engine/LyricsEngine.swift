@@ -37,8 +37,23 @@ final class LyricsEngine {
         didSet { defaults.set(lyricsOffset, forKey: Keys.offset) }
     }
 
+    /// `media-user-token` from music.apple.com, for Apple Music's own synced lyrics.
+    var appleMusicUserToken: String {
+        didSet {
+            guard appleMusicUserToken != oldValue else { return }
+            AppleMusicLyricsClient.userToken = appleMusicUserToken
+            appleLyricsStatus = nil
+            // Songs that had no synced lyrics before may have them now.
+            cache = cache.filter { if case .synced = $0.value { true } else { false } }
+            if let track = loadedTrack { loadLyrics(for: track) }
+        }
+    }
+    /// Result of the last Apple Music lyrics request, shown in Settings.
+    private(set) var appleLyricsStatus: String?
+
     let spotifyAuth: SpotifyAuth
     let appleMusic = AppleMusicSource()
+    let appleLyrics = AppleMusicLyricsClient()
 
     private enum Keys {
         static let liveActivity = "liveActivityEnabled"
@@ -70,6 +85,7 @@ final class LyricsEngine {
         liveActivityEnabled = defaults.bool(forKey: Keys.liveActivity)
         keepAliveEnabled = defaults.bool(forKey: Keys.keepAlive)
         lyricsOffset = defaults.double(forKey: Keys.offset)
+        appleMusicUserToken = AppleMusicLyricsClient.userToken ?? ""
         let auth = SpotifyAuth()
         spotifyAuth = auth
         spotify = SpotifyClient(auth: auth)
@@ -184,6 +200,32 @@ final class LyricsEngine {
         }
     }
 
+    /// Apple Music first (exact recording, when a token is set), then LRCLIB. Synced lyrics from either source
+    /// beat plain text from the other.
+    private func lookUpLyrics(for track: Track) async throws -> LyricsLookup {
+        var apple: LyricsLookup?
+        do {
+            apple = try await appleLyrics.lyrics(for: track)
+            if apple != nil { appleLyricsStatus = nil }
+        } catch {
+            appleLyricsStatus = error.localizedDescription
+            DiagnosticsLog.write("apple lyrics error for \(track.title): \(error.localizedDescription)")
+        }
+        if case .synced = apple {
+            DiagnosticsLog.write("lyrics source for \(track.title): apple music")
+            return apple!
+        }
+        do {
+            let lrc = try await lrclib.lyrics(for: track)
+            if case .synced = lrc { return lrc }
+            if case .plain = apple { return apple! }
+            return lrc
+        } catch {
+            if case .plain = apple { return apple! }
+            throw error
+        }
+    }
+
     private func loadLyrics(for track: Track) {
         DiagnosticsLog.write("track change -> \(track.title) / \(track.artist)")
         loadedTrack = track
@@ -194,10 +236,10 @@ final class LyricsEngine {
             return
         }
         lyrics = .loading
-        lyricsTask = Task { [lrclib] in
+        lyricsTask = Task {
             let result: LyricsState
             do {
-                switch try await lrclib.lyrics(for: track) {
+                switch try await lookUpLyrics(for: track) {
                 case .synced(let lines): result = .synced(lines)
                 case .plain(let text): result = .plain(text)
                 case .instrumental: result = .instrumental

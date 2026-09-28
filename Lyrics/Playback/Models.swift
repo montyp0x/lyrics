@@ -17,6 +17,8 @@ struct Track: Hashable {
     var artist: String
     var album: String
     var duration: TimeInterval
+    /// Apple Music catalog ID, when the track is playing from Apple Music's catalog.
+    var appleMusicID: String? = nil
 
     var primaryArtist: String {
         let separators = [", ", " & ", " feat. ", " ft. ", " featuring "]

@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @State private var appleMusicAuthorized = false
     @State private var errorMessage: String?
+    @State private var tokenCheck: String?
 
     var body: some View {
         @Bindable var engine = engine
@@ -22,6 +23,25 @@ struct SettingsView: View {
                             Task { appleMusicAuthorized = await engine.appleMusic.requestAuthorization() }
                         }
                     }
+                }
+
+                Section {
+                    SecureField("media-user-token", text: $engine.appleMusicUserToken)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.body.monospaced())
+                    Button("Check token") { checkAppleMusicToken() }
+                        .disabled(engine.appleMusicUserToken.isEmpty)
+                    if let tokenCheck {
+                        Text(tokenCheck).font(.footnote)
+                    }
+                    if let status = engine.appleLyricsStatus {
+                        Text(status).font(.footnote).foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Apple Music lyrics")
+                } footer: {
+                    Text("Uses Apple Music's own synced lyrics. Sign in at music.apple.com in a desktop browser, open the developer tools, and copy the media-user-token cookie. It lasts for months; paste a new one if lyrics stop loading.")
                 }
 
                 Section {
@@ -74,6 +94,18 @@ struct SettingsView: View {
                 Text(errorMessage ?? "")
             }
             .onAppear { appleMusicAuthorized = engine.appleMusic.isAuthorized }
+        }
+    }
+
+    private func checkAppleMusicToken() {
+        tokenCheck = "Checking…"
+        Task {
+            do {
+                let storefront = try await engine.appleLyrics.verify()
+                tokenCheck = "✓ Works (storefront \(storefront.uppercased()))"
+            } catch {
+                tokenCheck = "✗ \(error.localizedDescription)"
+            }
         }
     }
 

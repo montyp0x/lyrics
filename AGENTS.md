@@ -68,8 +68,20 @@ new activity appears only as a small icon until the user taps it. The user wants
  `com.ramych.lyrics.widgets`, followed by `No such file or directory` for the old bundle path, `chronod` is still
  pointing at the deleted install. `chronod` logs `Archive was nil` and StandBy shows nothing. Only a reboot
  fixes it: `xcrun devicectl device reboot --device $D`.
-- Apple Music's own synced lyrics aren't accessible to third-party apps (no public API; `MPMediaItem.lyrics`
-  only covers local files). Spotify's lyrics aren't in its Web API either. LRCLIB is the lyrics source.
+- **Lyrics sources:** Apple Music first, then LRCLIB. Synced lyrics from either beat plain text from the other.
+ - Apple Music (`AppleMusicLyricsClient`) uses the private API behind music.apple.com:
+ `amp-api.music.apple.com/v1/catalog/{storefront}/songs/{id}/lyrics` returns TTML (`TTMLParser`). It needs the
+ user's `media-user-token` cookie, which is pasted into Settings and kept in the Keychain. The developer token
+ is scraped from the web player's `index~*.js` bundle (the JWT with `iss: AMPWebPlay`) and cached until `exp`.
+ The song ID is `MPMediaItem.playbackStoreID`; Spotify tracks are matched by catalog search on title and duration.
+ Without the user token the lyrics endpoint returns 404.
+ - LRCLIB alone missed about 16% of the user's plays, mostly Russian rap (Big Baby Tape, ROCKET, Тима Белорусских).
+ Apple Music has synced lyrics for about 60% of those.
+ - Musixmatch's unofficial desktop API is useless without an account: anonymous tokens get a decoy ("NOKIA" by
+ Drake, gibberish text) for every song. NetEase works without a token but matches loosely; it has several SALUKI
+ tracks that Apple lacks.
+ - There's no public API for Apple Music lyrics (`MPMediaItem.lyrics` only covers local files), and Spotify's
+ Web API has no lyrics.
 - LRCLIB often files songs under a different title/artist split ("Song (feat. X)" by A vs "Song" by
   "A feat. X"). The client strips feat./remaster noise, tries a free-text search, and only settles for plain
   lyrics when no synced match exists within 5 s of the track duration. It retries once on HTTP 5xx.

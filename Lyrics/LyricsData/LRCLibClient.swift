@@ -2,12 +2,7 @@ import Foundation
 
 /// Client for https://lrclib.net, a free community database of synced lyrics.
 struct LRCLibClient {
-    enum Lookup: Equatable {
-        case synced([LyricLine])
-        case plain(String)
-        case instrumental
-        case notFound
-    }
+    typealias Lookup = LyricsLookup
 
     private struct Record: Decodable {
         let trackName: String?
