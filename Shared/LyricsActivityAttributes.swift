@@ -10,6 +10,9 @@ struct LyricsActivityAttributes: ActivityAttributes {
         var artist: String
         var currentLine: String
         var nextLine: String
+        /// Index of `currentLine` in the lyrics (-1 before the first line or when there are no synced lyrics).
+        /// StandBy uses it so a line keeps its identity as it moves from "next" to "current".
+        var lineIndex: Int
         var isPlaying: Bool
         var source: String
     }

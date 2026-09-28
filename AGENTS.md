@@ -12,9 +12,10 @@ would reject.
  user's `~/.ssh/id_rsa` has a passphrase. Ask the user to run `git push`, or to run
  `ssh-add --apple-use-keychain ~/.ssh/id_rsa` once so the agent's shell can push.
 - The installed build was made on 28 Sep with the free team, so it expires around 5 Oct. Reinstall before then.
-- **Open: StandBy freezes with the karaoke scroll.** See "StandBy layout". The fixed two-line cross-fade layout
- is installed as the control. Nobody has confirmed yet that it never freezes over a full day. The user liked
- the karaoke scroll and wants smooth line changes without a black flash.
+- **Open: StandBy freezes with the karaoke scroll.** The user asked for the karaoke scroll back on 28 Sep, so
+ StandBy uses it again (`KaraokeLinesView`). Lock Screen and Dynamic Island stay on the fixed two-line
+ cross-fade. The freeze is still unexplained: all three freezes on 26 Sep happened with this scroll installed.
+ See "StandBy layout".
 - **Untested live: the 8-hour expiry path** (`ResumeNotification`). The logic is in place, but no activity has
  reached 8 hours since it shipped. Check the log for `activity … state -> ended, age 8h00m` and
  `posted resume notification`.
@@ -148,9 +149,10 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
 - `.contentMarginsDisabled()` on the configuration plus `.padding(.top, -10)` put the title/artist on the same
   row as the system icon StandBy draws at the top center. StandBy clips roughly 16 pt above the view, so
   going higher cuts off glyphs. A 48 pt gap in the middle of the header keeps text clear of that icon.
-- Lyric lines are two plain `Text`s whose view tree is identical for every update (no `ViewThatFits`, no `if`,
- no `.id`/`.transition`), so a line change only swaps strings and cross-fades in place. Long lines shrink
- with `minimumScaleFactor` instead of truncating.
+- StandBy lyric lines are `KaraokeLinesView`: a `ForEach` keyed by `ContentState.lineIndex`, so the next line
+ keeps its identity and grows into the current one. Lock Screen and Dynamic Island use `LyricLinesView`, two
+ plain `Text`s with an identical view tree (no `ViewThatFits`, no `if`, no `.id`/`.transition`), so a line
+ change only swaps strings and cross-fades in place. Long lines shrink with `minimumScaleFactor`.
 - **Flashing black:** anything that swaps subtrees flashes black. That includes `ViewThatFits` changing branch
  (the original layout), and `.id(text)` + `.transition(.push)`.
 - **Freezing with the karaoke scroll:** a `ForEach` keyed by line index, so that "next" animates into "current",
