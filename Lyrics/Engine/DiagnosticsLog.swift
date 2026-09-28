@@ -1,14 +1,17 @@
 import UIKit
 
 /// Debug-only log written to the app container so it can be pulled with
-/// `devicectl device copy from --domain-type appDataContainer`.
+/// `devicectl device copy from --domain-type appDataContainer`. Rotates to `diagnostics.old.log` at 2 MB.
 @MainActor
 enum DiagnosticsLog {
-    private static let url = FileManager.default
-        .urls(for: .documentDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("diagnostics.log")
+    private static let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    private static let url = directory.appendingPathComponent("diagnostics.log")
+    private static let oldURL = directory.appendingPathComponent("diagnostics.old.log")
+    private static let maxSize: UInt64 = 2_000_000
+
     /// Reopened lazily: iOS relaunches the app at boot, before the first unlock makes Documents readable.
     private static var handle: FileHandle?
+    private static var size: UInt64 = 0
 
     private static func openHandle() -> FileHandle? {
         if let handle { return handle }
@@ -16,8 +19,15 @@ enum DiagnosticsLog {
             FileManager.default.createFile(atPath: url.path, contents: nil)
         }
         handle = try? FileHandle(forWritingTo: url)
-        _ = try? handle?.seekToEnd()
+        size = (try? handle?.seekToEnd()) ?? 0
         return handle
+    }
+
+    private static func rotate() {
+        try? handle?.close()
+        handle = nil
+        try? FileManager.default.removeItem(at: oldURL)
+        try? FileManager.default.moveItem(at: url, to: oldURL)
     }
 
     static func write(_ message: @autoclosure () -> String) {
@@ -28,8 +38,14 @@ enum DiagnosticsLog {
         case .background: "BG"
         @unknown default: "??"
         }
-        let time = Date.now.formatted(.dateTime.hour().minute().second().secondFraction(.fractional(2)))
-        openHandle()?.write(Data("[\(time) \(state)] \(message())\n".utf8))
+        let time = Date.now.formatted(
+            .dateTime.month(.twoDigits).day(.twoDigits).hour().minute().second().secondFraction(.fractional(2))
+        )
+        let data = Data("[\(time) \(state)] \(message())\n".utf8)
+        guard let handle = openHandle() else { return }
+        handle.write(data)
+        size += UInt64(data.count)
+        if size > maxSize { rotate() }
         #endif
     }
 }

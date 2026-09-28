@@ -66,7 +66,7 @@ private struct LockScreenLyricsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 StandByHeader(state: state)
                 LyricLinesView(state: state, currentSize: 40, nextSize: 26)
-                    .frame(maxHeight: .infinity, alignment: .top)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, 16)
             // With margins disabled, StandBy clips just above -10pt; that puts the header as close
@@ -153,32 +153,28 @@ private struct SongHeader: View {
     }
 }
 
-/// Renders the current and next line, scrolling like karaoke: lines are identified by their index, so on a
-/// line change the next line stays on screen and grows into the current one while the old line leaves upward.
+/// Renders the current and next line. The view tree is identical for every update (no `ViewThatFits`, no
+/// `if`, no `.id`), so a line change only swaps strings and the text cross-fades in place. Swapping whole
+/// subtrees fades everything out at once and flashes black; animating lines by identity froze StandBy.
 private struct LyricLinesView: View {
     let state: LyricsActivityAttributes.ContentState
     let currentSize: CGFloat
     let nextSize: CGFloat
 
-    private var lines: [(id: Int, text: String)] {
-        var lines = [(id: state.lineIndex, text: state.currentLine)]
-        if !state.nextLine.isEmpty { lines.append((id: state.lineIndex + 1, text: state.nextLine)) }
-        return lines
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(lines, id: \.id) { line in
-                let isCurrent = line.id == state.lineIndex
-                Text(line.text)
-                    .font(.system(size: isCurrent ? currentSize : nextSize, weight: isCurrent ? .bold : .semibold))
-                    .foregroundStyle(.white.opacity(isCurrent ? 1 : 0.5))
-                    // Shrink long lines instead of truncating them with "…".
-                    .lineLimit(isCurrent ? 3 : 2)
-                    .minimumScaleFactor(0.5)
-                    .layoutPriority(isCurrent ? 1 : 0)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            Text(state.currentLine)
+                .font(.system(size: currentSize, weight: .bold))
+                .foregroundStyle(.white)
+                // Shrink long lines instead of truncating them with "…".
+                .lineLimit(3)
+                .minimumScaleFactor(0.5)
+                .layoutPriority(1)
+            Text(state.nextLine)
+                .font(.system(size: nextSize, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.5))
+                .lineLimit(2)
+                .minimumScaleFactor(0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

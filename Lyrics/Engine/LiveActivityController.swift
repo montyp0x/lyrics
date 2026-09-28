@@ -5,6 +5,8 @@ import UIKit
 final class LiveActivityController {
     private var activity: Activity<LyricsActivityAttributes>?
     private var lastState: LyricsActivityAttributes.ContentState?
+    /// Without an activity `lastState` stays nil, so log on changes of this key instead of every tick.
+    private var lastLogKey: String?
 
     func update(_ state: LyricsActivityAttributes.ContentState) {
         if let activity, activity.activityState == .ended || activity.activityState == .dismissed {
@@ -12,7 +14,9 @@ final class LiveActivityController {
             lastState = nil
         }
         guard state != lastState else { return }
-        if state.title != lastState?.title {
+        let logKey = "\(activity.map { "\($0.activityState)" } ?? "nil") \(state.title)"
+        if logKey != lastLogKey {
+            lastLogKey = logKey
             DiagnosticsLog.write("activity \(activity.map { "\($0.activityState)" } ?? "nil") -> \(state.title): \(state.currentLine)")
         }
 
