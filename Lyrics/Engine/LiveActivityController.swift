@@ -1,3 +1,4 @@
+#if os(iOS)
 import ActivityKit
 import UIKit
 
@@ -16,10 +17,11 @@ final class LiveActivityController {
     /// Set when the current activity should be replaced rather than adopted again.
     private var wantsFreshActivity = false
     private var lastStartError: String?
+    private var revealTask: Task<Void, Never>?
 
     private static let refreshAge: TimeInterval = 60 * 60
 
-    func update(_ state: LyricsActivityAttributes.ContentState) {
+    func update(_ incoming: LyricsActivityAttributes.ContentState) {
         if let activity, activity.activityState == .ended || activity.activityState == .dismissed {
             DiagnosticsLog.write("activity \(activity.id.prefix(8)) is \(activity.activityState), age \(age(of: activity))")
             if activity.activityState == .ended {
@@ -31,7 +33,44 @@ final class LiveActivityController {
             self.activity = nil
             lastState = nil
         }
+
+        var state = incoming
+        let lineChanged = lastState.map {
+            $0.lineIndex != state.lineIndex || $0.nextLine != state.nextLine || $0.title != state.title
+        } ?? true
+        if lineChanged {
+            // A brand-new gray line has no previous opacity to animate from, so the first update draws it
+            // invisible and a second update fades it in.
+            state.nextLineFadedIn = state.nextLine.isEmpty
+            if state.nextLine.isEmpty {
+                revealTask?.cancel()
+            } else {
+                scheduleNextLineReveal(matching: state)
+            }
+        } else {
+            state.nextLineFadedIn = lastState?.nextLineFadedIn ?? true
+        }
         guard state != lastState else { return }
+        commit(state)
+    }
+
+    /// The gray line is inserted invisible. Once that update has been rendered, fade it in.
+    private func scheduleNextLineReveal(matching state: LyricsActivityAttributes.ContentState) {
+        revealTask?.cancel()
+        revealTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            guard var current = lastState,
+                  current.lineIndex == state.lineIndex,
+                  current.nextLine == state.nextLine,
+                  current.title == state.title,
+                  !current.nextLineFadedIn else { return }
+            current.nextLineFadedIn = true
+            commit(current)
+        }
+    }
+
+    private func commit(_ state: LyricsActivityAttributes.ContentState) {
         let logKey = "\(activity.map { "\($0.activityState)" } ?? "nil") \(state.title)"
         if logKey != lastLogKey {
             lastLogKey = logKey
@@ -68,6 +107,7 @@ final class LiveActivityController {
     }
 
     func end() {
+        revealTask?.cancel()
         let activities = Activity<LyricsActivityAttributes>.activities
         activity = nil
         lastState = nil
@@ -144,3 +184,4 @@ final class LiveActivityController {
         }
     }
 }
+#endif
