@@ -50,6 +50,7 @@ final class LyricsEngine {
     }
     /// Result of the last Apple Music lyrics request, shown in Settings.
     private(set) var appleLyricsStatus: String?
+    @ObservationIgnored private var reconnectingAppleMusic = false
 
     let spotifyAuth: SpotifyAuth
     let appleMusic = AppleMusicSource()
@@ -94,6 +95,14 @@ final class LyricsEngine {
     func start() {
         guard loops.isEmpty else { return }
         ResumeNotification.requestAuthorization()
+        var connectOnLaunch = appleMusicUserToken.isEmpty
+        #if DEBUG
+        // `devicectl device process launch … com.ramych.lyrics -connectAppleMusic` re-runs the device-token flow.
+        connectOnLaunch = connectOnLaunch || CommandLine.arguments.contains("-connectAppleMusic")
+        #endif
+        if connectOnLaunch, appleMusic.isAuthorized {
+            Task { await connectAppleMusicLyrics() }
+        }
         loops = [
             Task { [weak self] in
                 while !Task.isCancelled {
@@ -202,6 +211,29 @@ final class LyricsEngine {
         }
     }
 
+    /// Gets the Music User Token of the Apple ID on this iPhone, so Apple Music lyrics work without pasting one.
+    @discardableResult
+    func connectAppleMusicLyrics() async -> String {
+        do {
+            let token = try await appleLyrics.requestDeviceUserToken()
+            DiagnosticsLog.write("apple music device token: \(token.count) chars")
+            let previous = appleMusicUserToken
+            appleMusicUserToken = token
+            let storefront: String
+            do {
+                storefront = try await appleLyrics.verify()
+            } catch {
+                appleMusicUserToken = previous
+                throw error
+            }
+            DiagnosticsLog.write("apple music device token works, storefront \(storefront)")
+            return "✓ Connected (storefront \(storefront.uppercased()))"
+        } catch {
+            DiagnosticsLog.write("apple music device token failed: \(error)")
+            return "✗ \(error.localizedDescription)"
+        }
+    }
+
     /// Apple Music first (exact recording, when a token is set), then LRCLIB. Synced lyrics from either source
     /// beat plain text from the other.
     private func lookUpLyrics(for track: Track) async throws -> LyricsLookup {
@@ -212,6 +244,14 @@ final class LyricsEngine {
         } catch {
             appleLyricsStatus = error.localizedDescription
             DiagnosticsLog.write("apple lyrics error for \(track.title): \(error.localizedDescription)")
+            if case AppleMusicLyricsClient.Failure.unauthorized = error, !reconnectingAppleMusic {
+                // The user token expired or was revoked; get a new one from the device.
+                reconnectingAppleMusic = true
+                Task {
+                    await connectAppleMusicLyrics()
+                    reconnectingAppleMusic = false
+                }
+            }
         }
         if case .synced = apple {
             DiagnosticsLog.write("lyrics source for \(track.title): apple music")

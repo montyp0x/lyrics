@@ -1,4 +1,5 @@
 import Foundation
+import StoreKit
 
 /// Apple Music's own time-synced lyrics, from the API behind music.apple.com.
 ///
@@ -59,6 +60,21 @@ actor AppleMusicLyricsClient {
         let response = try JSONDecoder().decode(LyricsResponse.self, from: data)
         guard let ttml = response.data.first?.attributes.ttml else { return .notFound }
         return TTMLParser.parse(ttml)
+    }
+
+    /// Asks StoreKit for the Music User Token of the Apple ID signed in on this device, using the web
+    /// player's developer token. No login needed; requires Apple Music (media library) permission.
+    func requestDeviceUserToken() async throws -> String {
+        let developerToken = try await developerToken()
+        return try await withCheckedThrowingContinuation { continuation in
+            SKCloudServiceController().requestUserToken(forDeveloperToken: developerToken) { token, error in
+                if let token {
+                    continuation.resume(returning: token)
+                } else {
+                    continuation.resume(throwing: error ?? Failure.unauthorized)
+                }
+            }
+        }
     }
 
     /// Checks the token by asking for the account's storefront.

@@ -26,22 +26,34 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    SecureField("media-user-token", text: $engine.appleMusicUserToken)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.body.monospaced())
-                    Button("Check token") { checkAppleMusicToken() }
-                        .disabled(engine.appleMusicUserToken.isEmpty)
+                    if engine.appleMusicUserToken.isEmpty {
+                        Label("Not connected", systemImage: "xmark.circle")
+                    } else {
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                    }
+                    Button(engine.appleMusicUserToken.isEmpty ? "Connect" : "Reconnect") {
+                        tokenCheck = "Connecting…"
+                        Task { tokenCheck = await engine.connectAppleMusicLyrics() }
+                    }
+                    .disabled(!appleMusicAuthorized)
                     if let tokenCheck {
                         Text(tokenCheck).font(.footnote)
                     }
                     if let status = engine.appleLyricsStatus {
                         Text(status).font(.footnote).foregroundStyle(.red)
                     }
+                    DisclosureGroup("Paste a token manually") {
+                        SecureField("media-user-token", text: $engine.appleMusicUserToken)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .font(.body.monospaced())
+                        Button("Check token") { checkAppleMusicToken() }
+                            .disabled(engine.appleMusicUserToken.isEmpty)
+                    }
                 } header: {
                     Text("Apple Music lyrics")
                 } footer: {
-                    Text("Uses Apple Music's own synced lyrics. Sign in at music.apple.com in a desktop browser, open the developer tools, and copy the media-user-token cookie. It lasts for months; paste a new one if lyrics stop loading.")
+                    Text("Uses Apple Music's own synced lyrics with the Apple ID signed in on this iPhone. Needs Apple Music access (above) and a subscription.")
                 }
 
                 Section {

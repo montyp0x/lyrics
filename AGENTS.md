@@ -78,9 +78,14 @@ new activity appears only as a small icon until the user taps it. The user wants
  fixes it: `xcrun devicectl device reboot --device $D`.
 - **Lyrics sources:** Apple Music first, then LRCLIB. Synced lyrics from either beat plain text from the other.
  - Apple Music (`AppleMusicLyricsClient`) uses the private API behind music.apple.com:
- `amp-api.music.apple.com/v1/catalog/{storefront}/songs/{id}/lyrics` returns TTML (`TTMLParser`). It needs the
- user's `media-user-token` cookie, which is pasted into Settings and kept in the Keychain. The developer token
- is scraped from the web player's `index~*.js` bundle (the JWT with `iss: AMPWebPlay`) and cached until `exp`.
+ `amp-api.music.apple.com/v1/catalog/{storefront}/songs/{id}/lyrics` returns TTML (`TTMLParser`). The developer
+ token is scraped from the web player's `index~*.js` bundle (the JWT with `iss: AMPWebPlay`) and cached until
+ `exp`. The user token comes from `SKCloudServiceController.requestUserToken(forDeveloperToken:)`, called with
+ that scraped token. That's the Apple ID on the device, so no login is needed, and the lyrics endpoint accepts
+ it (verified). It's fetched on first launch, from Settings → Reconnect, and automatically after a 401; it's
+ kept in the Keychain. Pasting a `media-user-token` cookie by hand is still possible in Settings. For debug
+ builds, `devicectl device process launch --terminate-existing … com.ramych.lyrics -- -connectAppleMusic`
+ re-runs the device-token flow.
  The song ID is `MPMediaItem.playbackStoreID`; Spotify tracks are matched by catalog search on title and duration.
  Without the user token the lyrics endpoint returns 404.
  - LRCLIB alone missed about 16% of the user's plays, mostly Russian rap (Big Baby Tape, ROCKET, Тима Белорусских).
