@@ -180,12 +180,17 @@ private struct LyricLinesView: View {
 }
 
 /// StandBy: lines are identified by their index, so on a line change the next line stays on screen and
-/// moves up into the current slot. Font size and opacity are the only things that differ between slots;
-/// line limit and weight stay fixed so the layout can interpolate instead of reflowing mid-move.
+/// moves up into the current slot. The arriving line eases in slowly; the departing line fades out fast.
+/// Line limit and weight stay fixed so the text doesn't reflow mid-move.
 private struct KaraokeLinesView: View {
     let state: LyricsActivityAttributes.ContentState
     let currentSize: CGFloat
     let nextSize: CGFloat
+
+    /// How the arriving line grows and brightens.
+    private static let appear = Animation.smooth(duration: 1.0, extraBounce: 0)
+    /// How quickly the previous line is gone.
+    private static let depart = Animation.easeOut(duration: 0.2)
 
     private var lines: [(id: Int, text: String)] {
         var lines = [(id: state.lineIndex, text: state.currentLine)]
@@ -204,9 +209,14 @@ private struct KaraokeLinesView: View {
                     .minimumScaleFactor(0.5)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .geometryGroup()
+                    .animation(Self.appear, value: isCurrent)
+                    .transition(.asymmetric(
+                        insertion: .opacity.animation(Self.appear),
+                        removal: .opacity.animation(Self.depart)
+                    ))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.smooth(duration: 0.8, extraBounce: 0), value: state.lineIndex)
+        .animation(Self.depart, value: state.lineIndex)
     }
 }
