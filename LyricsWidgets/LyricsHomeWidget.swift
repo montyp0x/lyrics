@@ -26,14 +26,24 @@ private struct HomeProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<HomeEntry>) -> Void) {
         guard let state = LyricsWidgetStore.load() else {
-            completion(Timeline(entries: [.placeholder], policy: .never))
+            completion(Timeline(entries: [.placeholder], policy: .after(Date.now.addingTimeInterval(15))))
             return
         }
-        let entries = state.cues(from: .now).map { HomeEntry(cue: $0, state: state) }
-        let policy: TimelineReloadPolicy = state.isPlaying && entries.count > 1
-            ? .after(entries.last!.date.addingTimeInterval(0.5))
-            : .never
-        completion(Timeline(entries: entries.isEmpty ? [.placeholder] : entries, policy: policy))
+        let entries = timelineEntries(from: state)
+        // Re-read the file soon. A long timeline keeps the previous song on screen when iOS
+        // drops reloadTimelines during a burst of skips.
+        let refresh = min(entries.last?.date.addingTimeInterval(1) ?? .now.addingTimeInterval(12), Date.now.addingTimeInterval(12))
+        completion(Timeline(entries: entries, policy: .after(refresh)))
+    }
+
+    /// The line that's current, plus only the lines that fall within the next few seconds.
+    private func timelineEntries(from state: LyricsWidgetState) -> [HomeEntry] {
+        let now = Date.now
+        let cues = state.cues(from: now)
+        guard let first = cues.first else { return [.placeholder] }
+        let horizon = now.addingTimeInterval(15)
+        let upcoming = cues.dropFirst().filter { $0.date <= horizon }
+        return ([first] + upcoming).map { HomeEntry(cue: $0, state: state) }
     }
 }
 
@@ -152,16 +162,25 @@ private struct HomeMetrics {
     var showsControls: Bool
 
     init(size: CGSize) {
-        showsControls = size.width > 250 || size.height > 220
-        padding = size.height < 180 ? 12 : 16
-        let contentHeight = max(size.height - padding * 2, 1)
-        spacing = max(6, contentHeight * 0.04)
-        header = min(max(contentHeight * 0.1, 12), 20)
-        let controls = showsControls ? contentHeight * 0.18 : 0
-        let stage = max(contentHeight - controls - header, 1)
-        current = min(max(stage * 0.28, 17), size.width * 0.09, 40)
-        next = current * 0.65
-        control = min(max(size.height * 0.08, 14), 22)
+        let wide = size.width > 250
+        let tall = size.height > 280
+        showsControls = wide || tall
+        padding = 12
+        spacing = 6
+        header = tall ? 16 : 12
+        if tall {
+            current = 28
+            next = 18
+            control = 20
+        } else if wide {
+            current = 18
+            next = 13
+            control = 16
+        } else {
+            current = 16
+            next = 12
+            control = 0
+        }
     }
 }
 
@@ -185,7 +204,7 @@ private struct HomeLines: View {
                 Text(line.text)
                     .font(.system(size: isCurrent ? currentSize : nextSize, weight: .bold))
                     .foregroundStyle(.white.opacity(isCurrent ? 1 : 0.5))
-                    .lineLimit(isCurrent ? 4 : 2)
+                    .lineLimit(isCurrent ? 2 : 2)
                     .minimumScaleFactor(0.5)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
