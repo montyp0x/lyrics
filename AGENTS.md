@@ -44,7 +44,7 @@ would reject.
   - `Playback/` – `Track`/`PlaybackSnapshot` models (`Track.appleMusicID` = catalog ID) and the Apple Music source.
   - `Spotify/` – PKCE auth (tokens in Keychain; `Keychain` helper is used app-wide) and the currently-playing client.
   - `Views/` – now-playing screen with scrolling lyrics, and Settings.
-- `LyricsWidgets/` – widget extension: `LyricsLiveActivity.swift` (Lock Screen, Dynamic Island, StandBy UI)
+- `LyricsWidgets/` – widget extension: `LyricsHomeWidget.swift` (home screen) and `LyricsLiveActivity.swift` (Lock Screen, Dynamic Island, StandBy). The home-screen widget reads the app group's `widget-state.json`; the app writes a timeline of the remaining lines and WidgetKit advances it.
   and `PlayerIntents.swift` (StandBy tap controls).
 - `Shared/LyricsActivityAttributes.swift` – ActivityKit attributes, plus the Darwin notification name for
   player commands. Compiled into both targets.

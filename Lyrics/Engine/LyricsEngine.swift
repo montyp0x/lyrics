@@ -1,6 +1,7 @@
 import Foundation
 import notify
 import Observation
+import WidgetKit
 
 enum LyricsState: Equatable {
     case idle
@@ -75,6 +76,10 @@ final class LyricsEngine {
     @ObservationIgnored private var lyricsTask: Task<Void, Never>?
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var playerCommandToken: Int32 = 0
+    /// Last timeline handed to the home-screen widget. A matching key and a position within a second of playback
+    /// means the widget already has the right future lines, so it isn't rewritten on every tick.
+    @ObservationIgnored private var widgetAnchor: (key: String, position: TimeInterval, date: Date)?
+    @ObservationIgnored private var lastWidgetError: String?
     @ObservationIgnored private var liveActivityIndex: Int?
     /// A Live Activity update takes ~0.3 s to reach the screen (the widget extension re-renders it), and a line
     /// reads best slightly before it's sung, so the activity gets each line this much early.
@@ -316,7 +321,90 @@ final class LyricsEngine {
             liveActivityIndex = nil
         }
         pushLiveActivity()
+        publishWidgetTimeline()
         return max(delay, 0.01)
+    }
+
+
+    private func publishWidgetTimeline() {
+        let now = Date()
+        let position = snapshot.map { $0.estimatedPosition() + lyricsOffset } ?? 0
+        let key = widgetTimelineKey()
+        if let anchor = widgetAnchor, anchor.key == key {
+            let expected = snapshot?.isPlaying == true
+                ? anchor.position + now.timeIntervalSince(anchor.date)
+                : anchor.position
+            if abs(position - expected) < 1 { return }
+        }
+        let state = LyricsWidgetState(
+            title: snapshot?.track.title ?? "",
+            artist: snapshot?.track.artist ?? "",
+            source: snapshot?.source.rawValue ?? "",
+            isPlaying: snapshot?.isPlaying ?? false,
+            lines: widgetLines(),
+            anchorPosition: position,
+            anchorDate: now,
+            message: widgetMessage()
+        )
+        do {
+            try LyricsWidgetStore.save(state)
+            widgetAnchor = (key, position, now)
+            WidgetCenter.shared.reloadTimelines(ofKind: LyricsWidgetState.kind)
+            DiagnosticsLog.write("widget timeline \(state.title.isEmpty ? "idle" : state.title) playing=\(state.isPlaying) lines=\(state.lines.count)")
+        } catch {
+            let message = error.localizedDescription
+            if message != lastWidgetError {
+                lastWidgetError = message
+                DiagnosticsLog.write("widget save failed: \(message) url=\(LyricsWidgetStore.fileURL.path)")
+            }
+        }
+    }
+
+    private func widgetTimelineKey() -> String {
+        let track = snapshot.map { "\($0.track.title)|\($0.track.artist)|\($0.isPlaying)" } ?? "idle"
+        let lyricsKey: String
+        switch lyrics {
+        case .synced(let lines):
+            lyricsKey = "synced|\(lines.count)|\(lines.first?.time ?? 0)|\(lines.last?.time ?? 0)"
+        case .plain(let text):
+            lyricsKey = "plain|\(text.count)"
+        case .loading:
+            lyricsKey = "loading"
+        case .instrumental:
+            lyricsKey = "instrumental"
+        case .notFound:
+            lyricsKey = "notFound"
+        case .failed(let message):
+            lyricsKey = "failed|\(message)"
+        case .idle:
+            lyricsKey = "idle"
+        }
+        return "\(track)|\(lyricsKey)|\(lyricsOffset)"
+    }
+
+    private func widgetLines() -> [LyricsWidgetState.Line] {
+        guard case .synced(let lines) = lyrics else { return [] }
+        return lines.map { LyricsWidgetState.Line(time: $0.time, text: $0.text) }
+    }
+
+    private func widgetMessage() -> String {
+        switch lyrics {
+        case .synced:
+            return "♪"
+        case .plain(let text):
+            let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+            return line.isEmpty ? "Lyrics aren't synced" : line
+        case .loading:
+            return "Loading lyrics…"
+        case .instrumental:
+            return "Instrumental"
+        case .notFound:
+            return "No lyrics found"
+        case .failed:
+            return "Couldn't load lyrics"
+        case .idle:
+            return snapshot == nil ? "Nothing playing" : "♪"
+        }
     }
 
     private func pushLiveActivity() {

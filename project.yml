@@ -39,6 +39,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ramych.lyrics
+        CODE_SIGN_ENTITLEMENTS: Lyrics/Lyrics.entitlements
   LyricsWidgets:
     type: app-extension
     platform: iOS
@@ -54,3 +55,4 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ramych.lyrics.widgets
+        CODE_SIGN_ENTITLEMENTS: LyricsWidgets/LyricsWidgets.entitlements
