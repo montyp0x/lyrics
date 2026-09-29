@@ -33,24 +33,20 @@ private struct HomeProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<HomeEntry>) -> Void) {
         guard let state = LyricsWidgetStore.load() else {
-            completion(Timeline(entries: [.placeholder], policy: .after(Date.now.addingTimeInterval(15))))
+            completion(Timeline(entries: [.placeholder], policy: .after(Date.now.addingTimeInterval(30))))
             return
         }
-        let entries = timelineEntries(from: state)
-        // Re-read the file soon. A long timeline keeps the previous song on screen when iOS
-        // drops reloadTimelines during a burst of skips.
-        let refresh = min(entries.last?.date.addingTimeInterval(1) ?? .now.addingTimeInterval(12), Date.now.addingTimeInterval(12))
-        completion(Timeline(entries: entries, policy: .after(refresh)))
-    }
-
-    /// The line that's current, plus only the lines that fall within the next few seconds.
-    private func timelineEntries(from state: LyricsWidgetState) -> [HomeEntry] {
-        let now = Date.now
-        let cues = state.cues(from: now)
-        guard let first = cues.first else { return [.placeholder] }
-        let horizon = now.addingTimeInterval(15)
-        let upcoming = cues.dropFirst().filter { $0.date <= horizon }
-        return ([first] + upcoming).map { HomeEntry(cue: $0, state: state) }
+        // The whole rest of the song. WidgetKit advances these on its own. A short timeline
+        // freezes on the last line when the scheduled reload doesn't run.
+        let cues = state.cues(from: .now)
+        let entries = cues.isEmpty ? [HomeEntry.placeholder] : cues.map { HomeEntry(cue: $0, state: state) }
+        let policy: TimelineReloadPolicy
+        if state.isPlaying, let last = entries.last?.date, last > Date.now.addingTimeInterval(2) {
+            policy = .after(last.addingTimeInterval(1))
+        } else {
+            policy = .after(Date.now.addingTimeInterval(30))
+        }
+        completion(Timeline(entries: entries, policy: policy))
     }
 }
 
