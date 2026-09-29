@@ -6,6 +6,7 @@ import WidgetKit
 @main
 struct LyricsWidgetsBundle: WidgetBundle {
     var body: some Widget {
+        LyricsHomeWidget()
         LyricsLiveActivity()
     }
 }
