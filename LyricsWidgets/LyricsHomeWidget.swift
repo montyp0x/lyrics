@@ -6,7 +6,14 @@ struct LyricsHomeWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: LyricsWidgetState.kind, provider: HomeProvider()) { entry in
             HomeWidgetView(entry: entry)
-                .containerBackground(for: .widget) { Color.black }
+                .containerBackground(for: .widget) {
+                    // Opaque black hides Liquid Glass. The system material is the glass platter.
+                    if #available(iOS 26, *) {
+                        Color.clear
+                    } else {
+                        Rectangle().fill(.regularMaterial)
+                    }
+                }
         }
         .contentMarginsDisabled()
         .configurationDisplayName("Lyrics")
@@ -114,7 +121,7 @@ private struct HomeWidgetView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                         .font(.system(size: metrics.header, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.secondary)
                     }
                     HomeLines(
                         lineIndex: entry.lineIndex,
@@ -128,13 +135,7 @@ private struct HomeWidgetView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .widgetURL(URL(string: "lyrics-app://open"))
                 if metrics.showsControls, entry.source == "appleMusic" {
-                    HStack(spacing: 0) {
-                        control("backward.fill", intent: SkipTrackIntent(forward: false), size: metrics.control)
-                        control(entry.isPlaying ? "pause.fill" : "play.fill", intent: TogglePlaybackIntent(), size: metrics.control)
-                        control("forward.fill", intent: SkipTrackIntent(forward: true), size: metrics.control)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white.opacity(0.9))
+                    controls(size: metrics.control, playing: entry.isPlaying)
                 }
             }
             .padding(metrics.padding)
@@ -142,12 +143,34 @@ private struct HomeWidgetView: View {
         }
     }
 
+    @ViewBuilder
+    private func controls(size: CGFloat, playing: Bool) -> some View {
+        let row = HStack(spacing: 12) {
+            control("backward.fill", intent: SkipTrackIntent(forward: false), size: size)
+            control(playing ? "pause.fill" : "play.fill", intent: TogglePlaybackIntent(), size: size)
+            control("forward.fill", intent: SkipTrackIntent(forward: true), size: size)
+        }
+        if #available(iOS 26, *) {
+            GlassEffectContainer(spacing: 12) {
+                row
+            }
+        } else {
+            row.foregroundStyle(.primary)
+        }
+    }
+
+    @ViewBuilder
     private func control(_ systemImage: String, intent: some AppIntent, size: CGFloat) -> some View {
-        Button(intent: intent) {
+        let button = Button(intent: intent) {
             Image(systemName: systemImage)
                 .font(.system(size: size, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: size + 8)
+                .frame(maxWidth: .infinity, minHeight: size + 10)
                 .contentShape(Rectangle())
+        }
+        if #available(iOS 26, *) {
+            button.buttonStyle(.glass)
+        } else {
+            button.buttonStyle(.plain)
         }
     }
 }
@@ -203,7 +226,7 @@ private struct HomeLines: View {
                 let isCurrent = line.id == lineIndex
                 Text(line.text)
                     .font(.system(size: isCurrent ? currentSize : nextSize, weight: .bold))
-                    .foregroundStyle(.white.opacity(isCurrent ? 1 : 0.5))
+                    .foregroundStyle(isCurrent ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                     .lineLimit(isCurrent ? 2 : 2)
                     .minimumScaleFactor(0.5)
                     .frame(maxWidth: .infinity, alignment: .leading)
