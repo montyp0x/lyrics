@@ -1,5 +1,6 @@
 #!/bin/bash
-# Install Lyrics on the iPhone once a day, when it is unlocked and on this Mac's Wi-Fi.
+# Install Lyrics on the iPhone once a day, whenever it is on this Mac's Wi-Fi. Installing works
+# on a locked phone; the app is launched afterwards if the phone is unlocked.
 # The LaunchAgent scripts/com.ramych.lyrics.daily-install.plist starts this every 15 minutes
 # in the user's login session, where codesign can use the login keychain. (Cron can't:
 # it runs outside that session, and `launchctl asuser` there needs root.)
@@ -101,11 +102,6 @@ if kind == "lock":
         print("ready")
     else:
         print("wait not-unlocked")
-elif kind == "display":
-    if result.get("backlightState") in ("activeOn", "on"):
-        print("ready")
-    else:
-        print("wait screen-off")
 else:
     print("wait bad-check")
 PY
@@ -120,52 +116,8 @@ if [ "$gate" != "ready" ]; then
   exit 0
 fi
 
-run_devicectl "$TMP/display.json" displays || true
-gate=$(judge "$TMP/display.json" display)
-if [ "$gate" != "ready" ]; then
-  note "$gate"
-  exit 0
-fi
-
 if [ -n "${LYRICS_INSTALL_CHECK:-}" ]; then
   note "ready to install"
-  exit 0
-fi
-
-# Launch Services refuses this when the screen is locked, including StandBy,
-# and does it before the running app is replaced.
-xcrun devicectl --timeout 30 --json-output "$TMP/probe.json" \
-  device process launch --no-activate --device "$DEVICE" "$BUNDLE" \
-  >"$TMP/probe.txt" 2>&1 || true
-probe=$(/usr/bin/python3 - "$TMP/probe.json" "$TMP/probe.txt" << 'PY'
-import json, sys
-path, text_path = sys.argv[1], sys.argv[2]
-try:
-    data = json.load(open(path))
-except Exception:
-    data = {}
-text = ""
-try:
-    text = open(text_path, errors="replace").read()
-except Exception:
-    pass
-blob = json.dumps(data) + "\n" + text
-if data.get("info", {}).get("outcome") == "success" or "Launched application" in text:
-    print("ready")
-elif "Locked" in blob or "could not be, unlocked" in blob or "device is locked" in blob.lower():
-    print("wait locked")
-else:
-    print("wait launch-failed")
-PY
-)
-if [ "$probe" != "ready" ]; then
-  if [ "$probe" = "wait launch-failed" ]; then
-    log "launch probe failed"
-    tail -n 20 "$TMP/probe.txt" | while IFS= read -r line; do
-      log "probe: $line"
-    done
-  fi
-  note "$probe"
   exit 0
 fi
 
@@ -205,8 +157,10 @@ while [ "$i" -le 6 ]; do
     launched=1
     break
   fi
-  if grep -q "Locked" "$TMP/launch.txt"; then
-    sleep 5
+  # Right after an install, iOS refuses to launch with "Security" until it has
+  # verified the new profile with Apple.
+  if grep -q -e "Locked" -e "BSErrorCodeDescription = Security" "$TMP/launch.txt"; then
+    sleep 10
     i=$((i + 1))
     continue
   fi
@@ -217,6 +171,8 @@ date +%Y-%m-%d > "$STAMP"
 rm -f "$REASON"
 if [ "$launched" -eq 1 ]; then
   log "installed and launched"
+elif grep -q "Locked" "$TMP/launch.txt"; then
+  log "installed; phone locked, so the app was not launched"
 else
   log "installed; launch failed"
   tail -n 15 "$TMP/launch.txt" | while IFS= read -r line; do
