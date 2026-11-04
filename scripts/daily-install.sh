@@ -96,13 +96,7 @@ if data.get("info", {}).get("outcome") != "success":
     print("wait not-on-network")
     sys.exit(0)
 result = data.get("result") or {}
-if kind == "details":
-    conn = result.get("connectionProperties") or {}
-    if conn.get("tunnelState") == "connected" and conn.get("transportType") == "localNetwork":
-        print("ready")
-    else:
-        print("wait not-on-network")
-elif kind == "lock":
+if kind == "lock":
     if result.get("unlockedSinceBoot") is True:
         print("ready")
     else:
@@ -117,13 +111,8 @@ else:
 PY
 }
 
-run_devicectl "$TMP/details.json" details || true
-gate=$(judge "$TMP/details.json" details)
-if [ "$gate" != "ready" ]; then
-  note "$gate"
-  exit 0
-fi
-
+# lockState opens the Wi-Fi tunnel itself and fails when the phone is unreachable.
+# `details` only reports the tunnel's current state, which is down until something opens it.
 run_devicectl "$TMP/lock.json" lockState || true
 gate=$(judge "$TMP/lock.json" lock)
 if [ "$gate" != "ready" ]; then
