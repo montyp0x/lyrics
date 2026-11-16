@@ -43,8 +43,6 @@ struct LyricsWidgetState: Codable, Equatable {
         guard !lines.isEmpty else {
             return [Cue(date: now, index: -1, current: message, following: [])]
         }
-        // 0.65s early was about a line late, and a whole line early was too fast. Three quarters of
-        // the gap lands between those.
         let index = displayedIndex(at: played)
         var cues = [Cue(date: now, index: index, current: text(at: index), following: following(after: index))]
         guard isPlaying else { return cues }
@@ -59,9 +57,13 @@ struct LyricsWidgetState: Codable, Equatable {
         return cues
     }
 
-    /// How early to show the line at `index`: three quarters of the gap from the previous line,
-    /// never less than the iPhone's 0.65s and never a whole line.
+    /// macOS follows the same lyric timestamps as the app. Advancing by a fraction of the previous
+    /// gap can show lyrics seconds early, especially after an instrumental break.
+    /// iOS keeps its existing widget lead to compensate for presentation delays.
     private func lead(before index: Int) -> TimeInterval {
+        #if os(macOS)
+        return 0
+        #else
         let gap: TimeInterval
         if index > 0 {
             gap = lines[index].time - lines[index - 1].time
@@ -72,6 +74,7 @@ struct LyricsWidgetState: Codable, Equatable {
         }
         let safeGap = max(gap, 0.8)
         return min(max(safeGap * 0.75, 0.65), safeGap - 0.2)
+        #endif
     }
 
     private func displayedIndex(at played: TimeInterval) -> Int {
