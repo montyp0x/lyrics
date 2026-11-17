@@ -1,7 +1,7 @@
 import Foundation
-import notify
 import Observation
 import WidgetKit
+import notify
 
 enum LyricsState: Equatable {
     case idle
@@ -20,7 +20,12 @@ final class LyricsEngine {
     private(set) var lyrics: LyricsState = .idle
     private(set) var currentIndex: Int?
     private(set) var spotifyError: String?
+    #if os(macOS)
+    /// macOS Automation permission for the Music or Spotify app, when it has been denied.
+    private(set) var playbackAccessError: String?
+    #endif
 
+    #if os(iOS)
     var liveActivityEnabled: Bool {
         didSet {
             defaults.set(liveActivityEnabled, forKey: Keys.liveActivity)
@@ -33,6 +38,14 @@ final class LyricsEngine {
             updateKeepAlive()
         }
     }
+    #else
+    var menuBarEnabled: Bool {
+        didSet { defaults.set(menuBarEnabled, forKey: Keys.menuBar) }
+    }
+    var floatWindow: Bool {
+        didSet { defaults.set(floatWindow, forKey: Keys.floatWindow) }
+    }
+    #endif
     /// Seconds added to the playback position; positive values show lines earlier.
     var lyricsOffset: Double {
         didSet { defaults.set(lyricsOffset, forKey: Keys.offset) }
@@ -58,16 +71,23 @@ final class LyricsEngine {
     let appleLyrics = AppleMusicLyricsClient()
 
     private enum Keys {
+        #if os(iOS)
         static let liveActivity = "liveActivityEnabled"
         static let keepAlive = "keepAliveEnabled"
+        #else
+        static let menuBar = "menuBarEnabled"
+        static let floatWindow = "floatWindow"
+        #endif
         static let offset = "lyricsOffset"
     }
 
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let lrclib = LRCLibClient()
+    #if os(iOS)
     @ObservationIgnored private let liveActivity = LiveActivityController()
     @ObservationIgnored private let keeper = BackgroundKeeper()
     @ObservationIgnored private let locationKeeper = LocationKeeper()
+    #endif
     @ObservationIgnored private let spotify: SpotifyClient
     @ObservationIgnored private var appleSnapshot: PlaybackSnapshot?
     @ObservationIgnored private var spotifySnapshot: PlaybackSnapshot?
@@ -80,16 +100,26 @@ final class LyricsEngine {
     /// means the widget already has the right future lines, so it isn't rewritten on every tick.
     @ObservationIgnored private var widgetAnchor: (key: String, position: TimeInterval, date: Date)?
     @ObservationIgnored private var lastWidgetError: String?
+    @ObservationIgnored private var lastWidgetReload: Date?
+    @ObservationIgnored private var widgetReloadTask: Task<Void, Never>?
+    #if os(iOS)
     @ObservationIgnored private var liveActivityIndex: Int?
     /// A Live Activity update takes ~0.3 s to reach the screen (the widget extension re-renders it), and a line
     /// reads best slightly before it's sung, so the activity gets each line this much early.
     private static let liveActivityLead: TimeInterval = 0.65
+    #endif
 
     init() {
         let defaults = UserDefaults.standard
+        #if os(iOS)
         defaults.register(defaults: [Keys.liveActivity: true, Keys.keepAlive: true, Keys.offset: 0.0])
         liveActivityEnabled = defaults.bool(forKey: Keys.liveActivity)
         keepAliveEnabled = defaults.bool(forKey: Keys.keepAlive)
+        #else
+        defaults.register(defaults: [Keys.menuBar: true, Keys.floatWindow: false, Keys.offset: 0.0])
+        menuBarEnabled = defaults.bool(forKey: Keys.menuBar)
+        floatWindow = defaults.bool(forKey: Keys.floatWindow)
+        #endif
         lyricsOffset = defaults.double(forKey: Keys.offset)
         appleMusicUserToken = AppleMusicLyricsClient.userToken ?? ""
         let auth = SpotifyAuth()
@@ -99,7 +129,9 @@ final class LyricsEngine {
 
     func start() {
         guard loops.isEmpty else { return }
+        #if os(iOS)
         ResumeNotification.requestAuthorization()
+        #endif
         var connectOnLaunch = appleMusicUserToken.isEmpty
         #if DEBUG
         // `devicectl device process launch … com.ramych.lyrics -connectAppleMusic` re-runs the device-token flow.
@@ -130,20 +162,28 @@ final class LyricsEngine {
         ]
         notify_register_dispatch(playerCommandNotification, &playerCommandToken, .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                DiagnosticsLog.write("player command from live activity")
+                DiagnosticsLog.write("player command")
                 self?.pollAppleMusic()
+                #if os(macOS)
+                Task { _ = await self?.pollSpotify() }
+                #endif
             }
         }
+        #if os(iOS)
         updateKeepAlive()
+        #endif
     }
 
     func appDidBecomeActive() {
         DiagnosticsLog.write("app became active")
+        #if os(iOS)
         liveActivity.appDidBecomeActive()
+        #endif
         pollAppleMusic()
         tick()
     }
 
+    #if os(iOS)
     /// Lines for the Live Activity, which runs `liveActivityLead` ahead of the in-app view.
     private func displayLines(at index: Int?) -> (current: String, next: String) {
         switch lyrics {
@@ -160,12 +200,16 @@ final class LyricsEngine {
         case .idle: return ("", "")
         }
     }
+    #endif
 
     @ObservationIgnored private var pollCount = 0
 
     private func pollAppleMusic() {
         let previous = appleSnapshot
         appleSnapshot = appleMusic.snapshot()
+        #if os(macOS)
+        playbackAccessError = ScriptedPlayer.accessError
+        #endif
         pollCount += 1
         if let previous, let current = appleSnapshot, previous.track == current.track, previous.isPlaying, current.isPlaying {
             let drift = current.position - previous.estimatedPosition(at: current.capturedAt)
@@ -180,20 +224,54 @@ final class LyricsEngine {
     }
 
     private func pollSpotify() async -> Duration {
+        #if os(macOS)
+        // The desktop app reports position without a Spotify developer app. The Web API below still covers
+        // playback on other devices, and wins when the desktop app is paused.
+        let local = ScriptedPlayer.spotify.snapshot()
+        if local?.isPlaying == true {
+            spotifySnapshot = local
+            spotifyError = nil
+            refreshSnapshot()
+            return .seconds(1)
+        }
+        #endif
         guard spotifyAuth.isConnected else {
+            #if os(macOS)
+            spotifySnapshot = local
+            refreshSnapshot()
+            return .seconds(1)
+            #else
             spotifySnapshot = nil
             return .seconds(3)
+            #endif
         }
         do {
-            spotifySnapshot = try await spotify.currentPlayback()
+            let remote = try await spotify.currentPlayback()
             spotifyError = nil
+            #if os(macOS)
+            spotifySnapshot = remote?.isPlaying == true ? remote : (local ?? remote)
+            #else
+            spotifySnapshot = remote
+            #endif
             refreshSnapshot()
             return .seconds(3)
         } catch SpotifyError.rateLimited(let retryAfter) {
             spotifyError = SpotifyError.rateLimited(retryAfter: retryAfter).localizedDescription
+            #if os(macOS)
+            if let local {
+                spotifySnapshot = local
+                refreshSnapshot()
+            }
+            #endif
             return .seconds(max(retryAfter, 3))
         } catch {
             spotifyError = error.localizedDescription
+            #if os(macOS)
+            if let local {
+                spotifySnapshot = local
+                refreshSnapshot()
+            }
+            #endif
             return .seconds(5)
         }
     }
@@ -309,22 +387,30 @@ final class LyricsEngine {
             let position = snapshot.estimatedPosition() + lyricsOffset
             let index = LRCParser.index(in: lines, at: position)
             if index != currentIndex { currentIndex = index }
+            #if os(iOS)
             liveActivityIndex = LRCParser.index(in: lines, at: position + Self.liveActivityLead)
+            let boundaries = [position, position + Self.liveActivityLead]
+            #else
+            let boundaries = [position]
+            #endif
             if snapshot.isPlaying {
-                for boundary in [position, position + Self.liveActivityLead] {
+                for boundary in boundaries {
                     let next = (LRCParser.index(in: lines, at: boundary)).map { $0 + 1 } ?? 0
                     if next < lines.count { delay = min(delay, lines[next].time - boundary) }
                 }
             }
         } else {
             if currentIndex != nil { currentIndex = nil }
+            #if os(iOS)
             liveActivityIndex = nil
+            #endif
         }
+        #if os(iOS)
         pushLiveActivity()
+        #endif
         publishWidgetTimeline()
         return max(delay, 0.01)
     }
-
 
     private func publishWidgetTimeline() {
         let now = Date()
@@ -349,7 +435,7 @@ final class LyricsEngine {
         do {
             try LyricsWidgetStore.save(state)
             widgetAnchor = (key, position, now)
-            WidgetCenter.shared.reloadTimelines(ofKind: LyricsWidgetState.kind)
+            reloadWidgetTimeline()
             DiagnosticsLog.write("widget timeline \(state.title.isEmpty ? "idle" : state.title) playing=\(state.isPlaying) lines=\(state.lines.count)")
         } catch {
             let message = error.localizedDescription
@@ -358,6 +444,27 @@ final class LyricsEngine {
                 DiagnosticsLog.write("widget save failed: \(message) url=\(LyricsWidgetStore.fileURL.path)")
             }
         }
+    }
+
+    /// iOS drops widget reloads when they arrive in a burst, and then keeps the previous song's
+    /// timeline. Save every change, but reload at most once every couple of seconds, trailing the burst.
+    private func reloadWidgetTimeline() {
+        let now = Date()
+        if let lastWidgetReload, now.timeIntervalSince(lastWidgetReload) < 2 {
+            widgetReloadTask?.cancel()
+            widgetReloadTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                WidgetCenter.shared.reloadTimelines(ofKind: LyricsWidgetState.kind)
+                self.lastWidgetReload = Date()
+                DiagnosticsLog.write("widget reload")
+            }
+            return
+        }
+        widgetReloadTask?.cancel()
+        WidgetCenter.shared.reloadTimelines(ofKind: LyricsWidgetState.kind)
+        lastWidgetReload = now
+        DiagnosticsLog.write("widget reload")
     }
 
     private func widgetTimelineKey() -> String {
@@ -407,6 +514,7 @@ final class LyricsEngine {
         }
     }
 
+    #if os(iOS)
     private func pushLiveActivity() {
         guard liveActivityEnabled, let snapshot else { return }
         let lines = displayLines(at: liveActivityIndex)
@@ -431,4 +539,5 @@ final class LyricsEngine {
             locationKeeper.stop()
         }
     }
+    #endif
 }

@@ -3,7 +3,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(LyricsEngine.self) private var engine
+    #if os(iOS)
     @Environment(\.dismiss) private var dismiss
+    #endif
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @State private var appleMusicAuthorized = false
     @State private var errorMessage: String?
@@ -44,7 +46,7 @@ struct SettingsView: View {
                     }
                     DisclosureGroup("Paste a token manually") {
                         SecureField("media-user-token", text: $engine.appleMusicUserToken)
-                            .textInputAutocapitalization(.never)
+                            .withoutAutocapitalization()
                             .autocorrectionDisabled()
                             .font(.body.monospaced())
                         Button("Check token") { checkAppleMusicToken() }
@@ -53,12 +55,16 @@ struct SettingsView: View {
                 } header: {
                     Text("Apple Music lyrics")
                 } footer: {
+                    #if os(macOS)
+                    Text("Uses Apple Music's own synced lyrics with the Apple ID signed in on this Mac. Needs Apple Music access (above) and a subscription. Playback itself is read from the Music app.")
+                    #else
                     Text("Uses Apple Music's own synced lyrics with the Apple ID signed in on this iPhone. Needs Apple Music access (above) and a subscription.")
+                    #endif
                 }
 
                 Section {
                     TextField("Client ID", text: $spotifyAuth.clientID)
-                        .textInputAutocapitalization(.never)
+                        .withoutAutocapitalization()
                         .autocorrectionDisabled()
                         .font(.body.monospaced())
                     if spotifyAuth.isConnected {
@@ -74,10 +80,25 @@ struct SettingsView: View {
                 } header: {
                     Text("Spotify")
                 } footer: {
+                    #if os(macOS)
+                    Text("The Spotify app is read directly. To follow Spotify on other devices, create an app at developer.spotify.com, select Web API, and add this redirect URI:\n\(SpotifyAuth.redirectURI)")
+                        .textSelection(.enabled)
+                    #else
                     Text("Create an app at developer.spotify.com, select Web API, and add this redirect URI:\n\(SpotifyAuth.redirectURI)")
                         .textSelection(.enabled)
+                    #endif
                 }
 
+                #if os(macOS)
+                Section {
+                    Toggle("Show in menu bar", isOn: $engine.menuBarEnabled)
+                    Toggle("Keep window above other apps", isOn: $engine.floatWindow)
+                } header: {
+                    Text("Window")
+                } footer: {
+                    Text("The menu bar shows the current line. Add the Lyrics widget from the desktop widget gallery, then right-click it to change its size. The lyrics grow with the widget. The window can stay above other apps while you work.")
+                }
+                #else
                 Section {
                     Toggle("Lock Screen & Dynamic Island", isOn: $engine.liveActivityEnabled)
                     Toggle("Keep running in background", isOn: $engine.keepAliveEnabled)
@@ -86,6 +107,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("Background mode plays silent audio and keeps a coarse location session open, which iOS requires before it accepts Lock Screen updates from the background. It uses a little extra battery and shows the location indicator.")
                 }
+                #endif
 
                 Section {
                     Stepper(value: $engine.lyricsOffset, in: -5...5, step: 0.25) {
@@ -96,10 +118,12 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 Button("Done") { dismiss() }
             }
+            #endif
             .alert("Something went wrong", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") { errorMessage = nil }
             } message: {
@@ -136,5 +160,15 @@ struct SettingsView: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder func withoutAutocapitalization() -> some View {
+        #if os(iOS)
+        self.textInputAutocapitalization(.never)
+        #else
+        self
+        #endif
     }
 }

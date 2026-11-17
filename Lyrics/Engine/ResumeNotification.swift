@@ -1,3 +1,4 @@
+#if os(iOS)
 import UserNotifications
 
 /// Local notification shown when iOS ends the Live Activity (after 8 hours). Tapping it opens the app, and only
@@ -26,3 +27,4 @@ enum ResumeNotification {
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
     }
 }
+#endif

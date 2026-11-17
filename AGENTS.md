@@ -6,6 +6,13 @@ shows the current line in a Live Activity on the Lock Screen, in the Dynamic Isl
 StandBy. Not intended for the App Store: it relies on background tricks and private APIs that App Review
 would reject.
 
+There is also a Mac app (`LyricsMac` scheme, `com.ramych.lyrics.mac`). It shares the lyrics pipeline and
+shows the current line in a window, in the menu bar, and in a desktop widget (`LyricsMacWidgets`).
+macOS has no Live Activity and no `MPMusicPlayerController`, so it reads the Music and Spotify apps with
+AppleScript (`ScriptedPlayer`). Spotify playing on other devices still uses the Web API. The widget reads
+`~/Library/Application Support/Lyrics/widget-state.json`: the app writes a timeline of the
+remaining lines, and WidgetKit advances it. A seek, pause, or track change writes a new file.
+
 ## Status and open items (as of 28 Sep 2026)
 
 - Everything below is committed on `main`. Remote: `gmonty:montyp0x/lyrics.git`. The agent can't push: the
@@ -26,8 +33,9 @@ would reject.
 
 ## Layout
 
-- `project.yml` – XcodeGen spec. `Lyrics.xcodeproj` and both `Info.plist` files are generated and
+- `project.yml` – XcodeGen spec. `Lyrics.xcodeproj` and the `Info.plist` files are generated and
   gitignored; edit `project.yml`, then run `xcodegen generate`. That includes whenever you add a new source file.
+  `LyricsMac` is the Mac app.
 - `Lyrics/` – app target (iOS 17+, SwiftUI, Observation, Swift 5 language mode).
   - `Engine/LyricsEngine.swift` – main loop: polls Apple Music (1 s) and Spotify (3 s), picks the playing
     source, looks up lyrics (`lookUpLyrics`), and computes the current line. The tick loop sleeps until the
@@ -38,10 +46,12 @@ would reject.
   - `Engine/BackgroundKeeper.swift` – silent `AVAudioEngine` loop (`.mixWithOthers`) that keeps the
     app alive in the background.
   - `Engine/LocationKeeper.swift` – coarse background location session; see "Gotchas".
-  - `Engine/DiagnosticsLog.swift` – DEBUG-only log in `Documents/diagnostics.log`. Lines look like
+  - `Engine/DiagnosticsLog.swift` – DEBUG-only log in `Documents/diagnostics.log` on iOS, and
+    `~/Library/Containers/com.ramych.lyrics.mac/Data/Library/Application Support/Lyrics/diagnostics.log` on Mac. Lines look like
     `[28/09, 17:19:58,73 FG] …` (FG/BG/IN is the app state). It rotates to `diagnostics.old.log` at 2 MB.
   - `LyricsData/` – `LyricsLookup` result type, `LRCParser`, `LRCLibClient`, `AppleMusicLyricsClient`, `TTMLParser`.
-  - `Playback/` – `Track`/`PlaybackSnapshot` models (`Track.appleMusicID` = catalog ID) and the Apple Music source.
+  - `Playback/` – `Track`/`PlaybackSnapshot` models (`Track.appleMusicID` = catalog ID), the Apple Music source,
+    and `ScriptedPlayer` (macOS: AppleScript now-playing for Music and Spotify).
   - `Spotify/` – PKCE auth (tokens in Keychain; `Keychain` helper is used app-wide) and the currently-playing client.
   - `Views/` – now-playing screen with scrolling lyrics, and Settings.
 - `LyricsWidgets/` – widget extension: `LyricsHomeWidget.swift` (home screen) and `LyricsLiveActivity.swift` (Lock Screen, Dynamic Island, StandBy). The home-screen widget reads the app group's `widget-state.json`; the app writes a timeline of the remaining lines and WidgetKit advances it.
@@ -62,6 +72,12 @@ xcodebuild -project Lyrics.xcodeproj -scheme Lyrics -destination "id=$D" \
 rg -q SUCCEEDED /tmp/b.txt || exit 1   # a pipe through rg hides a failed build; don't install the old one
 xcrun devicectl device install app --device $D build/Build/Products/Debug-iphoneos/Lyrics.app
 xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails with "Locked" if the phone is locked; retry in a loop
+
+# Mac app. The first time a song is playing, macOS asks for Automation access to Music and Spotify.
+xcodebuild -project Lyrics.xcodeproj -scheme LyricsMac -destination "platform=macOS" \
+  -derivedDataPath build/mac -allowProvisioningUpdates build 2>&1 | rg -e "error:|BUILD SUCCEEDED|BUILD FAILED" | tee /tmp/b.txt
+rg -q SUCCEEDED /tmp/b.txt || exit 1
+open build/mac/Build/Products/Debug/Lyrics.app
 ```
 
 - The user wants every working build installed and relaunched right away without asking.
@@ -150,7 +166,8 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
   row as the system icon StandBy draws at the top center. StandBy clips roughly 16 pt above the view, so
   going higher cuts off glyphs. A 48 pt gap in the middle of the header keeps text clear of that icon.
 - StandBy lyric lines are `KaraokeLinesView`: a `ForEach` keyed by `ContentState.lineIndex`, so the next line
- keeps its identity and grows into the current one. Lock Screen and Dynamic Island use `LyricLinesView`, two
+ keeps its identity. The gray next line fades in over 1 s after it is added; the previous line fades out in 0.2 s. Line limit and
+ weight stay fixed so the line doesn't reflow mid-move. Lock Screen and Dynamic Island use `LyricLinesView`, two
  plain `Text`s with an identical view tree (no `ViewThatFits`, no `if`, no `.id`/`.transition`), so a line
  change only swaps strings and cross-fades in place. Long lines shrink with `minimumScaleFactor`.
 - **Flashing black:** anything that swaps subtrees flashes black. That includes `ViewThatFits` changing branch

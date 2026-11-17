@@ -1,3 +1,4 @@
+#if os(iOS)
 import MediaPlayer
 
 @MainActor
@@ -35,3 +36,27 @@ final class AppleMusicSource {
         )
     }
 }
+#else
+import StoreKit
+
+/// Playback comes from the Music app via AppleScript (`ScriptedPlayer`). StoreKit authorization is only
+/// for `requestUserToken`, which fetches Apple Music's own synced lyrics for the signed-in Apple ID.
+@MainActor
+final class AppleMusicSource {
+    private(set) var isAuthorized = SKCloudServiceController.authorizationStatus() == .authorized
+
+    func requestAuthorization() async -> Bool {
+        let status = await withCheckedContinuation { continuation in
+            SKCloudServiceController.requestAuthorization { status in
+                continuation.resume(returning: status)
+            }
+        }
+        isAuthorized = status == .authorized
+        return isAuthorized
+    }
+
+    func snapshot() -> PlaybackSnapshot? {
+        ScriptedPlayer.music.snapshot()
+    }
+}
+#endif

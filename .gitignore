@@ -5,3 +5,5 @@ DerivedData/
 build/
 Lyrics/Info.plist
 LyricsWidgets/Info.plist
+LyricsMac/Info.plist
+LyricsMacWidgets/Info.plist

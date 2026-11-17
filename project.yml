@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.ramych
   deploymentTarget:
     iOS: "17.0"
+    macOS: "14.0"
   createIntermediateGroups: true
 settings:
   base:
@@ -56,3 +57,49 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ramych.lyrics.widgets
         CODE_SIGN_ENTITLEMENTS: LyricsWidgets/LyricsWidgets.entitlements
+  LyricsMac:
+    type: application
+    platform: macOS
+    sources:
+      - Lyrics
+      - path: Shared
+        excludes:
+          - LyricsActivityAttributes.swift
+    info:
+      path: LyricsMac/Info.plist
+      properties:
+        CFBundleDisplayName: Lyrics
+        LSApplicationCategoryType: public.app-category.music
+        NSAppleMusicUsageDescription: Lyrics reads what's playing in Apple Music to show synced lyrics.
+        NSAppleEventsUsageDescription: Lyrics reads the current song from the Music and Spotify apps so it can show synced lyrics.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.ramych.lyrics.mac
+            CFBundleURLSchemes: [lyrics-app]
+    settings:
+      base:
+        PRODUCT_NAME: Lyrics
+        PRODUCT_BUNDLE_IDENTIFIER: com.ramych.lyrics.mac
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: LyricsMac/LyricsMac.entitlements
+    dependencies:
+      - target: LyricsMacWidgets
+        embed: true
+  LyricsMacWidgets:
+    type: app-extension
+    platform: macOS
+    sources:
+      - LyricsMacWidgets
+      - path: Shared
+        excludes:
+          - LyricsActivityAttributes.swift
+    info:
+      path: LyricsMacWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Lyrics
+        NSAppleEventsUsageDescription: Lyrics pauses, goes back, and skips in the Music and Spotify apps.
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ramych.lyrics.mac.widgets
+        CODE_SIGN_ENTITLEMENTS: LyricsMacWidgets/LyricsMacWidgets.entitlements

@@ -1,3 +1,4 @@
+#if os(iOS)
 import CoreLocation
 
 /// iOS rejects Live Activity updates from a process that is "only playing background media",
@@ -56,3 +57,4 @@ final class LocationKeeper: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 }
+#endif

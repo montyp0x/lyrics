@@ -1,8 +1,13 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct ContentView: View {
     @Environment(LyricsEngine.self) private var engine
+    #if os(iOS)
     @State private var showingSettings = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -21,25 +26,43 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Lyrics")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
+                #if os(macOS)
+                SettingsLink {
+                    Image(systemName: "gearshape")
+                }
+                #else
                 Button {
                     showingSettings = true
                 } label: {
                     Image(systemName: "gearshape")
                 }
+                #endif
             }
+            #if os(iOS)
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
+            #else
+            .background(WindowLevelAccessor(floating: engine.floatWindow))
+            .frame(minWidth: 380, minHeight: 520)
+            #endif
         }
     }
 
     private var emptyHint: String {
+        #if os(macOS)
+        if let playbackAccessError = engine.playbackAccessError { return playbackAccessError }
+        return "Play a song in Music or Spotify."
+        #else
         if !engine.appleMusic.isAuthorized && !engine.spotifyAuth.isConnected {
             return "Connect Apple Music or Spotify in Settings."
         }
         return "Play a song in Apple Music or Spotify."
+        #endif
     }
 }
 
@@ -121,3 +144,117 @@ private struct SyncedLyricsView: View {
         }
     }
 }
+
+#if os(macOS)
+struct MacMenuBarLabel: View {
+    var snapshot: PlaybackSnapshot?
+    var lyrics: LyricsState
+    var currentIndex: Int?
+
+    var body: some View {
+        let line = menuBarLine
+        if line.isEmpty {
+            Image(systemName: "music.note")
+        } else {
+            Text(line)
+        }
+    }
+
+    /// Kept short so a long lyric doesn't take over the menu bar.
+    private var menuBarLine: String {
+        let line = LyricLines.current(lyrics: lyrics, index: currentIndex)
+        guard !line.isEmpty else { return snapshot?.track.title ?? "" }
+        if line.count > 42 { return String(line.prefix(40)) + "…" }
+        return line
+    }
+}
+
+struct MacMenuBarView: View {
+    @Environment(LyricsEngine.self) private var engine
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let snapshot = engine.snapshot {
+                HStack {
+                    Text(snapshot.track.title).font(.headline).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(snapshot.source.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(snapshot.track.artist)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(LyricLines.current(lyrics: engine.lyrics, index: engine.currentIndex))
+                    .font(.title3.bold())
+                    .fixedSize(horizontal: false, vertical: true)
+                let next = LyricLines.next(lyrics: engine.lyrics, index: engine.currentIndex)
+                if !next.isEmpty {
+                    Text(next)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text("Nothing playing").font(.headline)
+                Text(engine.playbackAccessError ?? "Play a song in Music or Spotify.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Open Lyrics") { openWindow(id: "main") }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(16)
+        .frame(width: 320)
+    }
+}
+
+private enum LyricLines {
+    static func current(lyrics: LyricsState, index: Int?) -> String {
+        switch lyrics {
+        case .synced(let lines):
+            guard let index, lines.indices.contains(index) else { return "" }
+            let text = lines[index].text
+            return text.isEmpty ? "♪" : text
+        case .loading: return "Loading lyrics…"
+        case .plain: return "Lyrics aren't synced"
+        case .instrumental: return "Instrumental"
+        case .notFound: return "No lyrics found"
+        case .failed: return "Couldn't load lyrics"
+        case .idle: return ""
+        }
+    }
+
+    static func next(lyrics: LyricsState, index: Int?) -> String {
+        guard case .synced(let lines) = lyrics, let index else { return "" }
+        let next = index + 1
+        guard lines.indices.contains(next) else { return "" }
+        return lines[next].text
+    }
+}
+
+/// SwiftUI has no window-level modifier that goes back to macOS 14, so a hidden view sets it.
+private struct WindowLevelAccessor: NSViewRepresentable {
+    var floating: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.isHidden = true
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let level: NSWindow.Level = floating ? .floating : .normal
+        if let window = view.window {
+            window.level = level
+        } else {
+            DispatchQueue.main.async { [weak view] in
+                view?.window?.level = level
+            }
+        }
+    }
+}
+#endif

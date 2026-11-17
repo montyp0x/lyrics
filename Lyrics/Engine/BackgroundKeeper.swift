@@ -1,3 +1,4 @@
+#if os(iOS)
 import AVFoundation
 
 /// Plays silence, mixed with other audio, so iOS keeps the app running in the background
@@ -71,3 +72,4 @@ final class BackgroundKeeper {
         return buffer
     }
 }
+#endif
