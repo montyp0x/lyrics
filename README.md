@@ -82,6 +82,7 @@ xcodebuild -project Lyrics.xcodeproj -scheme Lyrics -destination "id=DEVICE_UDID
 # Mac
 xcodebuild -project Lyrics.xcodeproj -scheme LyricsMac -destination "platform=macOS" \
   -derivedDataPath build/mac -allowProvisioningUpdates build
+pkill -x LyricsMacWidgets   # otherwise the desktop widget keeps running the previous build
 open build/mac/Build/Products/Debug/Lyrics.app
 ```
 

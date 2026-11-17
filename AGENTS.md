@@ -83,6 +83,7 @@ xcrun devicectl device process launch --device $D com.ramych.lyrics   # fails wi
 xcodebuild -project Lyrics.xcodeproj -scheme LyricsMac -destination "platform=macOS" \
   -derivedDataPath build/mac -allowProvisioningUpdates build 2>&1 | rg -e "error:|BUILD SUCCEEDED|BUILD FAILED" | tee /tmp/b.txt
 rg -q SUCCEEDED /tmp/b.txt || exit 1
+pkill -x Lyrics; pkill -x LyricsMacWidgets   # the widget process keeps running old code otherwise
 open build/mac/Build/Products/Debug/Lyrics.app
 ```
 
@@ -131,6 +132,11 @@ open build/mac/Build/Products/Debug/Lyrics.app
  `com.ramych.lyrics.widgets`, followed by `No such file or directory` for the old bundle path, `chronod` is still
  pointing at the deleted install. It logs `Archive was nil` and StandBy shows nothing. Only a reboot fixes it:
  `xcrun devicectl device reboot --device $D`, then the user enters the passcode.
+- **The Mac widget extension keeps running old code after a rebuild.** `LyricsMacWidgets` is a long-lived
+ process, and replacing the `.appex` on disk doesn't restart it. On 17 Nov the running one dated from 21 Oct, so
+ the 16 Nov timing fix (no lead on macOS) never showed, and lines still changed early. Kill it after every
+ Mac build (`pkill -x LyricsMacWidgets`); macOS starts the new one on the next redraw. Check with
+ `ps -axo pid,lstart,command | rg LyricsMacWidgets`.
 - **iOS relaunches the app at boot, before the first unlock**, when `Documents` and the Keychain are still
  locked. `DiagnosticsLog` reopens its file lazily because of this.
 - **Lyrics sources:** Apple Music first, then LRCLIB. Synced lyrics from either beat plain text from the other.
