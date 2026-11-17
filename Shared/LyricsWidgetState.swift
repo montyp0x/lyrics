@@ -57,12 +57,16 @@ struct LyricsWidgetState: Codable, Equatable {
         return cues
     }
 
-    /// macOS follows the same lyric timestamps as the app. Advancing by a fraction of the previous
-    /// gap can show lyrics seconds early, especially after an instrumental break.
-    /// iOS keeps its existing widget lead to compensate for presentation delays.
+    /// How much earlier than its timestamp the Mac widget shows a line. WidgetKit takes a moment to render an
+    /// entry, and the arriving line then animates in over a second, so exact timestamps read as late
+    /// (17 Nov). It's the same for every line, so nothing is cut short, even after an instrumental break.
+    static let macLead: TimeInterval = 0.5
+
+    /// macOS uses the fixed `macLead`. A fraction of the previous gap showed lyrics seconds early,
+    /// especially after an instrumental break. iOS keeps its gap-based widget lead.
     private func lead(before index: Int) -> TimeInterval {
         #if os(macOS)
-        return 0
+        return Self.macLead
         #else
         let gap: TimeInterval
         if index > 0 {

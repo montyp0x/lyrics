@@ -22,32 +22,33 @@ struct WidgetTimingTests {
         )
         let appLines = lines.enumerated().map { LyricLine(id: $0.offset, time: $0.element.time, text: $0.element.text) }
 
-        // Compare with the actual in-app selector around every boundary, including long gaps
-        // and equal timestamps. The latter must select the last line at that timestamp.
+        // The widget runs exactly `macLead` ahead of the in-app selector, around every boundary, including
+        // long gaps and equal timestamps. The latter must select the last line at that timestamp.
+        let lead = LyricsWidgetState.macLead
         let positions: [TimeInterval] = [0, 12, 125, 148.79, 200]
-            + lines.flatMap { [$0.time - 0.001, $0.time, $0.time + 0.001] }
+            + lines.flatMap { [$0.time - lead - 0.001, $0.time - lead, $0.time - lead + 0.001] }
         for position in positions {
             let now = anchor.addingTimeInterval(position)
             let cue = state.cues(from: now, limit: 1)[0]
-            let appIndex = LRCParser.index(in: appLines, at: now.timeIntervalSince(anchor)) ?? -1
+            let appIndex = LRCParser.index(in: appLines, at: now.timeIntervalSince(anchor) + lead) ?? -1
             precondition(cue.index == appIndex, "Widget index \(cue.index) differs from app index \(appIndex) at \(position)s")
         }
 
-        // Future entries must use the same boundaries as the app, without advancing lines.
+        // Future entries use the app's boundaries, each moved `macLead` earlier.
         let cues = state.cues(from: anchor)
         precondition(cues.count == lines.count + 1)
         for cue in cues.dropFirst() {
-            precondition(abs(cue.date.timeIntervalSince(anchor) - lines[cue.index].time) < 0.000001)
+            precondition(abs(cue.date.timeIntervalSince(anchor) - (lines[cue.index].time - lead)) < 0.000001)
         }
 
         // A delayed provider request catches up from the saved clock.
         precondition(state.cues(from: anchor.addingTimeInterval(125))[0].index == 2)
 
         // A replacement anchor after a seek includes the user's timing offset exactly once.
-        state.anchorPosition = 147.8 + 0.5
+        state.anchorPosition = 147.0 + 0.5
         let sought = state.cues(from: anchor)
         precondition(sought[0].index == 2)
-        precondition(abs(sought[1].date.timeIntervalSince(anchor) - 0.5) < 0.000001)
+        precondition(abs(sought[1].date.timeIntervalSince(anchor) - (148.8 - lead - 147.5)) < 0.000001)
 
         // Pausing freezes the same line the app displays, regardless of elapsed wall time.
         state.isPlaying = false
