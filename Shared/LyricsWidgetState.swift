@@ -57,10 +57,11 @@ struct LyricsWidgetState: Codable, Equatable {
         return cues
     }
 
-    /// How much earlier than its timestamp the Mac widget shows a line. WidgetKit takes a moment to render an
-    /// entry, and the arriving line then animates in over a second, so exact timestamps read as late
-    /// (17 Nov). It's the same for every line, so nothing is cut short, even after an instrumental break.
-    static let macLead: TimeInterval = 0.5
+    /// How much earlier than its timestamp the Mac widget shows a line. macOS applies timeline entries late:
+    /// measured on screen on 17 Nov (OCR at 12 fps, 8 line changes), 0.6–1.7 s after the entry's date. A 1 s
+    /// lead centers that, but single lines still land up to ~0.5 s early or late; WidgetKit can't do better.
+    /// It's the same for every line, so nothing is cut short, even after an instrumental break.
+    static let macLead: TimeInterval = 1.0
 
     /// macOS uses the fixed `macLead`. A fraction of the previous gap showed lyrics seconds early,
     /// especially after an instrumental break. iOS keeps its gap-based widget lead.
