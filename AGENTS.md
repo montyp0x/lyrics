@@ -39,7 +39,8 @@ remaining lines, and WidgetKit advances it. A seek, pause, or track change write
 - `Lyrics/` – app target (iOS 17+, SwiftUI, Observation, Swift 5 language mode).
   - `Engine/LyricsEngine.swift` – main loop: polls Apple Music (1 s) and Spotify (3 s), picks the playing
     source, looks up lyrics (`lookUpLyrics`), and computes the current line. The tick loop sleeps until the
-    next line boundary (capped at 200 ms). It also gets the Apple Music user token (`connectAppleMusicLyrics`).
+    next line boundary (capped at 200 ms) while synced lyrics play, and 1 s otherwise; a track, play/pause, or
+    lyrics change restarts it (`restartTickLoop`). It also gets the Apple Music user token (`connectAppleMusicLyrics`).
   - `Engine/LiveActivityController.swift` – starts, updates, and replaces the activity, handles the 8-hour
     expiry, and logs each activity's state changes and age.
   - `Engine/ResumeNotification.swift` – local "tap to bring lyrics back" notification.
@@ -49,7 +50,12 @@ remaining lines, and WidgetKit advances it. A seek, pause, or track change write
   - `Engine/DiagnosticsLog.swift` – DEBUG-only log in `Documents/diagnostics.log` on iOS, and
     `~/Library/Containers/com.ramych.lyrics.mac/Data/Library/Application Support/Lyrics/diagnostics.log` on Mac. Lines look like
     `[28/09, 17:19:58,73 FG] …` (FG/BG/IN is the app state). It rotates to `diagnostics.old.log` at 2 MB.
-  - `LyricsData/` – `LyricsLookup` result type, `LRCParser`, `LRCLibClient`, `AppleMusicLyricsClient`, `TTMLParser`.
+  - `LyricsData/` – `LyricsLookup` result type, `LRCParser`, `LRCLibClient`, `AppleMusicLyricsClient`, `TTMLParser`,
+    `CatalogMatcher` (Spotify track → Apple Music catalog song: title plus artist, or a near-exact duration), and
+    `LyricsDiskCache` (one JSON per track in Caches; synced kept, anything else expires after 3 days, and nothing
+    non-synced is saved when the Apple Music request failed).
+- `Tests/` – standalone executables compiled with `xcrun swiftc -parse-as-library`; the command is at the top of
+  each file. `LyricsDataTests` covers parsers, matching, and the disk cache; `WidgetTimingTests` the widget timeline.
   - `Playback/` – `Track`/`PlaybackSnapshot` models (`Track.appleMusicID` = catalog ID), the Apple Music source,
     and `ScriptedPlayer` (macOS: AppleScript now-playing for Music and Spotify).
   - `Spotify/` – PKCE auth (tokens in Keychain; `Keychain` helper is used app-wide) and the currently-playing client.

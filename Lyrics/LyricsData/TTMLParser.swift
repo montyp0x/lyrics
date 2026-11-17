@@ -41,12 +41,26 @@ enum TTMLParser {
             // Background vocals follow the main words without a separating space.
             .replacing(#/<span[^>]*x-bg[^>]*>/#, with: " ")
             .replacing(#/<[^>]+>/#, with: "")
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&apos;", with: "'")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacing(#/&(#[xX]?[0-9A-Fa-f]+|amp|apos|quot|lt|gt);/#) { decodeEntity(String($0.output.1)) }
             .replacing(#/\s+/#, with: " ")
             .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Decodes in one pass, so `&amp;#39;` stays `&#39;` as written.
+    private static func decodeEntity(_ name: String) -> String {
+        switch name {
+        case "amp": return "&"
+        case "apos": return "'"
+        case "quot": return "\""
+        case "lt": return "<"
+        case "gt": return ">"
+        default:
+            let hex = name.hasPrefix("#x") || name.hasPrefix("#X")
+            let digits = name.dropFirst(hex ? 2 : 1)
+            guard let code = UInt32(digits, radix: hex ? 16 : 10), let scalar = Unicode.Scalar(code) else {
+                return "&\(name);"
+            }
+            return String(Character(scalar))
+        }
     }
 }

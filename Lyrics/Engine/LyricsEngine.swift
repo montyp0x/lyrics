@@ -11,6 +11,15 @@ enum LyricsState: Equatable {
     case instrumental
     case notFound
     case failed(String)
+
+    init(_ lookup: LyricsLookup) {
+        switch lookup {
+        case .synced(let lines): self = .synced(lines)
+        case .plain(let text): self = .plain(text)
+        case .instrumental: self = .instrumental
+        case .notFound: self = .notFound
+        }
+    }
 }
 
 @MainActor
@@ -59,6 +68,7 @@ final class LyricsEngine {
             appleLyricsStatus = nil
             // Songs that had no synced lyrics before may have them now.
             cache = cache.filter { if case .synced = $0.value { true } else { false } }
+            diskCache.removeUnsynced()
             if let track = loadedTrack { loadLyrics(for: track) }
         }
     }
@@ -83,6 +93,7 @@ final class LyricsEngine {
 
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let lrclib = LRCLibClient()
+    @ObservationIgnored private let diskCache = LyricsDiskCache.shared
     #if os(iOS)
     @ObservationIgnored private let liveActivity = LiveActivityController()
     @ObservationIgnored private let keeper = BackgroundKeeper()
@@ -95,6 +106,10 @@ final class LyricsEngine {
     @ObservationIgnored private var cache: [Track: LyricsState] = [:]
     @ObservationIgnored private var lyricsTask: Task<Void, Never>?
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
+    /// Separate from `loops` so a state change (play, track, lyrics) can wake it from a long idle sleep.
+    @ObservationIgnored private var tickLoop: Task<Void, Never>?
+    /// How often the line timer runs while nothing is playing or there are no synced lyrics.
+    private static let idleTickInterval: TimeInterval = 1
     @ObservationIgnored private var playerCommandToken: Int32 = 0
     /// Last timeline handed to the home-screen widget. A matching key and a position within a second of playback
     /// means the widget already has the right future lines, so it isn't rewritten on every tick.
@@ -153,13 +168,8 @@ final class LyricsEngine {
                     try? await Task.sleep(for: delay)
                 }
             },
-            Task { [weak self] in
-                while !Task.isCancelled {
-                    let delay = self?.tick() ?? 0.2
-                    try? await Task.sleep(for: .seconds(delay))
-                }
-            },
         ]
+        restartTickLoop()
         notify_register_dispatch(playerCommandNotification, &playerCommandToken, .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 DiagnosticsLog.write("player command")
@@ -276,12 +286,28 @@ final class LyricsEngine {
         }
     }
 
+    /// Runs `tick` now and then again whenever it asks. Restarted on every state change that can shorten the
+    /// wait, because an idle tick sleeps for a whole second.
+    private func restartTickLoop() {
+        tickLoop?.cancel()
+        tickLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                let delay = self?.tick() ?? Self.idleTickInterval
+                try? await Task.sleep(for: .seconds(delay))
+            }
+        }
+    }
+
     private func refreshSnapshot() {
         let candidates = [spotifySnapshot, appleSnapshot].compactMap { $0 }
         let chosen = candidates.first(where: \.isPlaying)
             ?? candidates.first(where: { $0.source == snapshot?.source })
             ?? candidates.first
+        let previous = snapshot
         snapshot = chosen
+        if tickLoop != nil, previous?.track != chosen?.track || previous?.isPlaying != chosen?.isPlaying {
+            restartTickLoop()
+        }
 
         guard let track = chosen?.track else {
             loadedTrack = nil
@@ -318,13 +344,16 @@ final class LyricsEngine {
     }
 
     /// Apple Music first (exact recording, when a token is set), then LRCLIB. Synced lyrics from either source
-    /// beat plain text from the other.
-    private func lookUpLyrics(for track: Track) async throws -> LyricsLookup {
+    /// beat plain text from the other. `appleFailed` means Apple Music errored, so a non-synced result may be
+    /// incomplete and shouldn't be cached on disk.
+    private func lookUpLyrics(for track: Track) async throws -> (lookup: LyricsLookup, appleFailed: Bool) {
         var apple: LyricsLookup?
+        var appleFailed = false
         do {
             apple = try await appleLyrics.lyrics(for: track)
             if apple != nil { appleLyricsStatus = nil }
         } catch {
+            appleFailed = true
             appleLyricsStatus = error.localizedDescription
             DiagnosticsLog.write("apple lyrics error for \(track.title): \(error.localizedDescription)")
             if case AppleMusicLyricsClient.Failure.unauthorized = error, !reconnectingAppleMusic {
@@ -336,17 +365,17 @@ final class LyricsEngine {
                 }
             }
         }
-        if case .synced = apple {
+        if let apple, case .synced = apple {
             DiagnosticsLog.write("lyrics source for \(track.title): apple music")
-            return apple!
+            return (apple, false)
         }
         do {
             let lrc = try await lrclib.lyrics(for: track)
-            if case .synced = lrc { return lrc }
-            if case .plain = apple { return apple! }
-            return lrc
+            if case .synced = lrc { return (lrc, false) }
+            if let apple, case .plain = apple { return (apple, appleFailed) }
+            return (lrc, appleFailed)
         } catch {
-            if case .plain = apple { return apple! }
+            if let apple, case .plain = apple { return (apple, appleFailed) }
             throw error
         }
     }
@@ -360,16 +389,20 @@ final class LyricsEngine {
             lyrics = cached
             return
         }
+        if let saved = diskCache.load(track) {
+            DiagnosticsLog.write("lyrics for \(track.title) from disk cache")
+            let state = LyricsState(saved)
+            cache[track] = state
+            lyrics = state
+            return
+        }
         lyrics = .loading
         lyricsTask = Task {
             let result: LyricsState
             do {
-                switch try await lookUpLyrics(for: track) {
-                case .synced(let lines): result = .synced(lines)
-                case .plain(let text): result = .plain(text)
-                case .instrumental: result = .instrumental
-                case .notFound: result = .notFound
-                }
+                let (lookup, appleFailed) = try await lookUpLyrics(for: track)
+                if !appleFailed { diskCache.save(lookup, for: track) }
+                result = LyricsState(lookup)
             } catch {
                 result = .failed(error.localizedDescription)
             }
@@ -377,13 +410,17 @@ final class LyricsEngine {
             DiagnosticsLog.write("lyrics for \(track.title): \(String(describing: result).prefix(40))")
             if case .failed = result {} else { cache[track] = result }
             lyrics = result
+            restartTickLoop()
         }
     }
 
-    /// Updates the current lines and returns how long to wait before the next line change (capped at 200 ms).
+    /// Updates the current lines and returns how long to wait before the next line change: at most 200 ms
+    /// while synced lyrics play, otherwise `idleTickInterval`.
+    @discardableResult
     private func tick() -> TimeInterval {
-        var delay = 0.2
+        var delay = Self.idleTickInterval
         if let snapshot, case .synced(let lines) = lyrics {
+            if snapshot.isPlaying { delay = 0.2 }
             let position = snapshot.estimatedPosition() + lyricsOffset
             let index = LRCParser.index(in: lines, at: position)
             if index != currentIndex { currentIndex = index }

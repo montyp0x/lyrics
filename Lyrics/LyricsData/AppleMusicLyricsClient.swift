@@ -98,12 +98,15 @@ actor AppleMusicLyricsClient {
         let (data, status) = try await get("catalog/\(storefront)/search", query: components.queryItems, userToken: userToken)
         guard status == 200 else { throw Failure.http(status) }
         let songs = try JSONDecoder().decode(SearchResponse.self, from: data).results.songs?.data ?? []
-        let title = LRCLibClient.cleanTitle(track.title).lowercased()
-        return songs.first { song in
-            let sameTitle = LRCLibClient.cleanTitle(song.attributes.name).lowercased() == title
-            let durationGap = abs(Double(song.attributes.durationInMillis ?? 0) / 1000 - track.duration)
-            return sameTitle && (track.duration <= 0 || durationGap < 3)
-        }?.id
+        let candidates = songs.map {
+            CatalogMatcher.Candidate(
+                id: $0.id,
+                title: $0.attributes.name,
+                artist: $0.attributes.artistName ?? "",
+                durationInMillis: $0.attributes.durationInMillis
+            )
+        }
+        return CatalogMatcher.bestMatch(for: track, in: candidates)?.id
     }
 
     private func storefront(userToken: String) async throws -> String {
@@ -198,6 +201,7 @@ actor AppleMusicLyricsClient {
         struct Song: Decodable {
             struct Attributes: Decodable {
                 let name: String
+                let artistName: String?
                 let durationInMillis: Int?
             }
             let id: String
